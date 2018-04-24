@@ -1,0 +1,414 @@
+% !TeX spellcheck = en_US
+\documentclass[a4paper,10pt,twocolumn]{scrartcl}
+
+%\renewcommand{\baselinestretch}{1.0} % Change to 1.65 for double spacing
+%\hoffset-2.5mm
+%\voffset-1mm
+%\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+%\usepackage{kpfonts}
+%\usepackage{lmodern}
+%\usepackage{libertine}
+\usepackage{fourier} % obvious choice for this note ;-)
+%\usepackage{bera}
+%\usepackage{dejavu}
+
+\newcommand{\Title}{Fourier Optics Simulations}
+\newcommand{\Authors}{É.\ Thiébaut \& M. Tallon}
+
+\title{\Title}
+\author{\Authors}
+
+\usepackage[left=9mm, right=9mm, top=20mm, bottom=20mm,columnsep=8mm]{geometry}
+
+\DeclareUnicodeCharacter{2264}{\le} % ≤
+\DeclareUnicodeCharacter{2265}{\ge} % ≥
+\DeclareUnicodeCharacter{22C5}{\!\cdot\!}
+
+%\newcommand*{\DeleteColor}{\color{orange}}
+%\newcommand*{\NewColor}{\color{teal}}
+%\newcommand{\BeginDelete}{\begingroup\DeleteColor}
+%\let\EndDelete=\endgroup
+%\newcommand{\BeginNew}{\begingroup\NewColor}
+%\let\EndNew=\endgroup
+%\newcommand{\Delete}[1]{{\DeleteColor\sout{#1}}}
+%\newcommand{\New}[1]{{\NewColor#1}}
+%\newcommand{\Replace}[2]{\Delete{#1} \New{#2}}
+\newcommand{\Hide}[1]{}
+\newcommand{\Show}[1]{#1}
+
+%\usepackage{bbm}
+\usepackage{dsfont}
+\RequirePackage{mathrsfs}
+%\RequirePackage{stmaryrd}
+
+%\usepackage{subfig}
+
+\usepackage{graphicx}
+\graphicspath{{cholesky-figs/}}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+%\usepackage[authoryear,round,semicolon]{natbib}
+
+\usepackage[squaren,Gray]{SIunits}
+\usepackage{xspace}
+
+\usepackage[ruled,vlined]{algorithm2e}
+\usepackage{algpseudocode}
+
+%\usepackage{tikz}
+%\usetikzlibrary{calc}
+%\usetikzlibrary{arrows.meta}
+
+% Table settings:
+%\usepackage{array}
+%\usepackage{booktabs}
+%\colorlet{tableheadcolor}{gray!25}
+%\colorlet{tablerowcolor}{gray!12.5}
+%\newcommand{\TopRule}{\specialrule{\heavyrulewidth}{0pt}{0pt}}
+%\newcommand{\BottomRule}{\specialrule{\lightrulewidth}{0pt}{0pt}}
+%\extrarowheight2pt
+%\newcolumntype{P}[1]{>{\raggedright}p{#1}}
+%\newcolumntype{M}[1]{>{\raggedright}m{#1}}
+
+
+\usepackage[dvipsnames,hyperref]{xcolor}
+\newcommand{\oops}[1]{\textcolor[named]{BrickRed}{#1}}
+\colorlet{HyperColor}{MidnightBlue}
+\colorlet{ChapColor}{OliveGreen}
+\colorlet{MyLinkColor}{HyperColor}
+\colorlet{MyURLColor}{HyperColor}
+\colorlet{MyCiteColor}{HyperColor}
+\colorlet{MyFileColor}{HyperColor}
+\colorlet{MyMenuColor}{HyperColor}
+\colorlet{MyPageColor}{HyperColor}
+
+\usepackage[unicode=true,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=true,pdfborder={0 0 0},backref=page,colorlinks=true]{hyperref}
+\hypersetup{
+  pdftitle={\Title},
+  pdfauthor={\Authors},
+  unicode=true,
+  linkcolor=MyLinkColor,
+  urlcolor=MyURLColor,
+  citecolor=MyCiteColor,
+  filecolor=MyFileColor,
+  menucolor=MyMenuColor%,pagecolor=MyPageColor
+}
+
+\newcommand{\newstuff}[1]{{\color{magenta}#1}}
+\newcommand{\strong}[1]{\textbf{\emph{#1}}}
+\newcommand*{\code}[1]{\texttt{#1}}
+\newcommand*{\variable}[1]{\texttt{#1}}
+\newcommand*{\FileName}[1]{\texttt{#1}}
+
+% Abbreviations:
+\newcommand*{\etal}{\emph{et al.}\xspace}
+\newcommand*{\etc}{\emph{etc.}\xspace}
+\newcommand*{\eg}{\emph{e.g.}\xspace}
+\newcommand*{\ie}{\emph{i.e.}\xspace}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\useosf % no longer required if osf specified, otherwise after all math
+\DeclareSymbolFont{bbold}{U}{bbold}{m}{n}
+\DeclareSymbolFontAlphabet{\mathbbold}{bbold}
+\RequirePackage{textcomp}  % required for special glyphs
+
+% Parenthesis:
+%\def\Paren{}\let\Paren\undefined
+\DeclarePairedDelimiterX{\Paren}[1]{(}{)}{#1}
+\DeclarePairedDelimiterX{\Brace}[1]{\{}{\}}{#1}
+\DeclarePairedDelimiterX{\Brack}[1]{[}{]}{#1}
+\DeclarePairedDelimiterX{\Abs}[1]{\rvert}{\lvert}{#1}
+\DeclarePairedDelimiterX{\Norm}[1]{\lVert}{\rVert}{#1}
+\DeclarePairedDelimiterX{\Group}[1]{\lgroup}{\rgroup}{#1}
+%\DeclarePairedDelimiterX{\FrobNorm}[1]{\lVert}{\rVert_{\Tag{F}}}{#1}
+\DeclarePairedDelimiterX{\Avg}[1]{\langle}{\rangle}{#1}
+\DeclarePairedDelimiterX{\Round}[1]{\lfloor}{\rceil}{#1}
+\DeclarePairedDelimiterX{\Floor}[1]{\lfloor}{\rfloor}{#1}
+\DeclarePairedDelimiterX{\Ceil}[1]{\lceil}{\rceil}{#1}
+%\DeclarePairedDelimiterX{\Inner}[2]{\langle}{\rangle}{#1\,\delimsize\vert\,#2}
+\DeclarePairedDelimiterX{\Inner}[2]{\langle}{\rangle}{#1,#2}
+%\DeclarePairedDelimiterXPP{\IndexedList}[3]{}\{\}{_{#2}^{#3}}{#1}
+\DeclarePairedDelimiterXPP{\IndexedList}[3]{}\{\}{_{#2,\ldots,#3}}{#1}
+
+% A list \List{ELEM}{START}{END}
+\DeclarePairedDelimiterXPP{\List}[3]{}{\{}{\}}{_{#2,\ldots,#3}}{#1}
+
+\newcommand*{\delimsize}{}
+\newcommand*{\suchthat}{\,\vert\,} % compact version
+\newcommand*{\SuchThat}{\:\delimsize\vert\:} % autoscale to surrounding version
+\newcommand*{\given}{\,\vert\,} % compact version
+\newcommand*{\Given}{\:\delimsize\vert\:} % autoscale to surrounding version
+%\newcommand*{\given}{\mathbin{\vert}}
+%\newcommand*{\Given}{\mathrel{\delimsize\vert}} % autoscale to surrounding version
+
+% Upright letters:
+\newcommand*{\mathd}{\mathrm{d}}
+\newcommand*{\mathe}{\mathrm{e}}
+\newcommand*{\mathi}{\mathrm{i}}
+
+% Operators/functions
+\renewcommand*{\Re}{\operatorname{Re}}
+\renewcommand*{\Im}{\operatorname{Im}}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator{\arc}{arc}
+\DeclareMathOperator{\rnd}{rnd}
+\DeclareMathOperator{\sign}{sign}
+\DeclareMathOperator{\sinc}{sinc}
+\DeclareMathOperator{\Card}{Card}
+\DeclareMathOperator{\Conv}{conv}
+%\DeclareMathOperator{\Det}{Det}
+\newcommand*{\Det}{\det}
+\DeclareMathOperator{\Diag}{diag}
+\DeclareMathOperator{\Dom}{dom}
+\DeclareMathOperator{\Prox}{prox}
+\DeclareMathOperator{\Rank}{rank}
+\DeclareMathOperator{\Sign}{sign}
+\DeclareMathOperator{\Span}{span}
+\DeclareMathOperator{\Trace}{tr}
+\newcommand*{\trace}{\Trace}
+
+% Statistics:
+%\DeclareMathOperator{\Var}{Var}
+%\DeclareMathOperator{\Cov}{Cov}
+%\DeclareMathOperator{\Expect}{E}
+%\newcommand*{\Expect}{\mathbb{E}}
+\DeclarePairedDelimiterXPP{\Var}[1]{\mathrm{Var}}(){}{#1}
+\DeclarePairedDelimiterXPP{\Cov}[1]{\mathrm{Cov}}(){}{#1}
+\DeclarePairedDelimiterXPP{\Expect}[1]{\mathrm{E}}(){}{#1}
+\DeclarePairedDelimiterXPP{\LogPr}[1]{\ell}(){}{#1}
+
+% Sets:
+\newcommand*{\Set}[1]{\mathbb{#1}}
+\newcommand*{\Reals}{\Set{R}}
+\newcommand*{\Integers}{\Set{Z}}
+\newcommand*{\NaturalNumbers}{\Set{N}}
+\newcommand*{\Rationals}{\Set{Q}}
+\newcommand*{\Complexes}{\Set{C}}
+
+% Miscellaneous:
+\newcommand*{\Tag}[1]{\mathsf{#1}}
+\newcommand*{\PDer}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand*{\bydef}{\stackrel{{\scriptscriptstyle \text{def}}}{=}}
+\newcommand*{\TwoIPi}{2\,\mathi\,\pi}
+%\newcommand*{\rand}[1]{\widetilde{#1}} % random value/variable
+%\newcommand*{\rand}[1]{\tilde{#1}} % random value/variable
+%\newcommand*{\SIM}{\text{\raisebox{-0.3ex}[0pt][0pt]{$\sim$}}}
+\newcommand*{\SIM}{\smash{\sim}}
+\newcommand*{\proxy}[1]{\overset{\SIM}{#1}} % random value/variable
+%\newcommand*{\proxy}[1]{\widetilde{#1}}
+\newcommand*{\estim}[1]{\widehat{#1}}
+%\newcommand*{\FT}[1]{\widehat{#1}}
+%\newcommand*{\FT}[1]{\mathring{#1}}
+\newcommand*{\FT}[1]{\widetilde{#1}}
+\newcommand*{\DFT}[1]{\widehat{#1}}
+\newcommand*{\MathNote}[2]{\hspace*{#1}\text{\footnotesize(#2)}}
+\newcommand*{\better}[1]{#1^{+}}
+\newcommand*{\best}[1]{#1^{\star}}
+\newcommand*{\Combine}{{\circ}}
+\newcommand*{\EndProof}{\blacksquare}
+
+
+% ========== LINEAR ALGEBRA ==========
+
+\newcommand*{\V}[1]{\boldsymbol{#1}}   % a vector
+\newcommand*{\M}[1]{\mathbf{#1}}       % an operator (a matrix)
+
+%\newcommand*{\TransposeLetter}{\top}
+%\newcommand*{\TransposeLetter}{\mathrm{t}}
+\newcommand*{\TransposeLetter}{\mathsf{T}}
+\newcommand*{\T}{^{\TransposeLetter}}
+\newcommand*{\mT}{^{-\TransposeLetter}}
+%\newcommand*{\ConjugateTransposeLetter}{\ast}
+\newcommand*{\ConjugateTransposeLetter}{\mathsf{H}}
+\newcommand*{\CT}{^{\ConjugateTransposeLetter}}
+\newcommand*{\mCT}{^{-\ConjugateTransposeLetter}}
+
+% The following definition is to remove surrounding spacing around ⋅
+% to denote dot product.
+\newcommand*{\MDot}{\mathord{\,\mathchar"2201\,}}
+\newcommand*{\Tcdot}{\T\!⋅}
+
+\newcommand*{\QuadTerm}[2]{#2\T\MDot#1\MDot#2}
+\newcommand{\ArrayWithDelimiters}[4]{%
+  \left #1\begin{array}{#2}#4\end{array}\right #3}
+\newcommand{\Matrix}[2]{\ArrayWithDelimiters{\lgroup}{#1}{\rgroup}{#2}}
+\newcommand{\Vector}[1]{\ArrayWithDelimiters{\lgroup}{c}{\rgroup}{#1}}
+\newcommand{\TwoByTwoMatrix}[4]{\Matrix{cc}{#1 & #2 \\ #3 & #4 \\}}
+\newcommand{\TwoByTwoSymmetricMatrix}[3]{\TwoByTwoMatrix{#1}{#3}{#3}{#2}}
+
+%\newcommand*{\One}{1\hspace*{-0.8ex}1}
+%\newcommand*{\Zero}{0\hspace*{-0.8ex}0}
+%\newcommand*{\One}{\mathbbm{1}}
+%\newcommand*{\Zero}{\mathbbm{0}}
+\newcommand*{\One}{\mathds{1}}
+\newcommand*{\Zero}{\mathds{O}}
+%\newcommand*{\Zero}{\V 0}
+%\newcommand*{\One}{\V 1}
+
+%------------------------------------------------------------------------------
+% Ref: Alexander R. Perlis., "A complement to \smash, \llap, and \rlap,"
+%      TUGboat, Vol. 22, pp. 350-352, 2001.
+%      <http://math.arizona.edu/~aprl/publications/mathclap/>
+%
+% For comparison, the existing overlap macros:
+% \def\llap#1{\hbox to 0pt{\hss#1}}
+% \def\rlap#1{\hbox to 0pt{#1\hss}}
+  \def\clap#1{\hbox to 0pt{\hss#1\hss}}
+  \def\mathllap{\mathpalette\mathllapinternal}
+  \def\mathrlap{\mathpalette\mathrlapinternal}
+  \def\mathclap{\mathpalette\mathclapinternal}
+  \def\mathllapinternal#1#2{\llap{$\mathsurround=0pt#1{#2}$}}
+  \def\mathrlapinternal#1#2{\rlap{$\mathsurround=0pt#1{#2}$}}
+  \def\mathclapinternal#1#2{\clap{$\mathsurround=0pt#1{#2}$}}
+
+%----------------------------------------------------------- SIMPLE ALGORITHMS -
+
+\usepackage{array}
+\newcommand{\CodeBlock}[1]{\begin{array}{{>{\displaystyle}l}}#1\end{array}} 
+\newcommand{\FloorBlock}[1]{\left\lfloor\quad\CodeBlock{#1}\right.} 
+\newcommand{\VertBlock}[1]{\left\lvert\quad\CodeBlock{#1}\right.} 
+
+%------------------------------------------------------------------- NOTATIONS -
+
+\newcommand*{\textfrac}[2]{{\textstyle\frac{#1}{#2}}}
+\newcommand*{\half}{\textfrac{1}{2}}
+\newcommand*{\IntegerRange}[1]{[\hspace*{-0.4ex}[#1]\hspace*{-0.4ex}]}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Abstract...
+\end{abstract}
+
+
+\section{Numerical Simulation}
+
+Propagation of the complex amplitude between the pupil plane and the focal
+plane of a (perfect) lens amounts to computing:
+\begin{align}
+  \FT{A}(\V s) = \iint A(\V r) \, \mathe^{
+    \frac{-2\,\mathi\,\pi}{\lambda\,f}\,\Inner{\V r}{\V s}
+  } \, \mathd^2\V r \, ,
+  \label{eq:lens-transform}
+\end{align}
+which involves a continuous Fourier transform and where $\lambda$ and $f$
+are the wavelength and the focal length while $\V r$ and $\V s$ are the
+positions in the pupil and focal plane respectively.  \oops{[A
+normalization term is missing.]}
+
+When the model is discretized, the complex amplitudes $A(\V r)$ and
+$\FT{A}(\V s)$ are sampled at evenly spaced positions.  For instance:
+\begin{subequations}
+\begin{align}
+  A_{\V j} &\approx A(\V r_{\V j}) \,, \\
+  \FT{A}_{\V k} &\approx \FT{A}(\V s_{\V k}) \,,
+\end{align}
+\end{subequations}
+with $\V j \in \Omega$ and $\V k \in \Omega$ the 2D indices of the
+samples in, respectively, the input and output plane and:
+\begin{subequations}
+\begin{align}
+  \V r_{\V j} &= (\V j - \V j_0) \times \Delta r \, , \\
+  \V s_{\V k} &= (\V k - \V k_0) \times \Delta s \, ,
+\end{align}
+\end{subequations}
+where $\Delta r$ and $\Delta s$ are the sampling sizes (assumed to be the
+same along the two dimensions) in the pupil plane and in the focal plane
+while $\V j_0$ and $\V k_0$ are suitable offsets (not necessarily
+integers).  The set $\Omega \subset \Integers^2$ of sampling indices has
+size $N_1 \times N_2$.  Using the same conventions as for the 2D discrete
+Fourier transform, $\Omega$ is defined as:
+\begin{equation}
+  \Omega = \IntegerRange{0,N_1-1}\times\IntegerRange{0,N_2-1} \, .
+\end{equation}
+As a result of choosing identical sampling sizes along all dimensions, we
+have to take the same number of samples in every dimension (hence
+$N_1=N_2=N$). \oops{[OK but explain why.]}
+
+For discretized complex amplitudes, the continuous Fourier transform is
+approximated by a discrete Fourier transform (DFT) defined by:
+\begin{equation}
+  \DFT{B}_{\V k}
+  \bydef \sum_{\V j \in \Omega}
+  B_{\V j} \, \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}} \, ,
+  \label{eq:DFT}  
+\end{equation}
+where the inner product on $\Omega$ is defined by:
+\begin{equation}
+  \Inner{\V j}{\V k}_{\Omega} = \sum\nolimits_d \frac{j_d\,k_d}{N_d} \, ,
+\end{equation}
+where the sum is taken over the number of dimensions ($2$ for us).
+
+Approximating the integral in Eq.~(\ref{eq:lens-transform}) by a Riemann sum yields:
+\begin{equation}
+  \FT{A}_{\V k} \approx \sum_{\V j \in \Omega} A_{\V j} \, \mathe^{\frac{-2\,\mathi\,\pi}{\lambda\,f}\,\Inner{\V r_{\V j}}{\V s_{\V k}}} \,
+  \Delta r^2 \, .
+  \label{eq:Riemann-approx}
+\end{equation}
+\oops{[There is also the missing normalization factor to take into account here.]}
+In order to make this looks like a DFT, the following relation must hold:
+\begin{displaymath}
+  \Inner{\V j - \V j_0}{\V k - \V k_0}_{\Omega}
+  = \frac{\Inner{\V r_{\V j}}{\V s_{\V k}}}{\lambda\,f} \, ,
+  \label{eq:dimensioning}
+\end{displaymath}
+which implies that:
+\begin{equation}
+  N\,\Delta r\,\Delta s = \lambda\,f \, .
+\end{equation}
+This relation relates the sampling sizes in the two planes.  Note that the
+quantities $\Delta r$, $\Delta s$, $\lambda$ and $f$ are all lengths.
+Assuming the relation in Eq.~(\ref{eq:dimensioning}) holds, the complex
+amplitude in the focal plane is approximately given by:
+\begin{align}
+  \FT{A}_{\V k}
+  &\approx \sum_{\V j \in \Omega} A_{\V j} \,
+  \mathe^{-2\,\mathi\,\pi \, \Inner{\V j - \V j_0}{\V k - \V k_0}_{\Omega}} \,
+  \Delta r^2 \notag\\
+  &= \Delta r^2 \,
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j_0}{\V k - \V k_0}_{\Omega}} \,
+  \sum_{\V j \in \Omega}
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \, A_{\V j} \, \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}} \, ,  
+\end{align}
+where the sum in the last right hand side is the DFT of:
+\begin{displaymath}
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \, A_{\V j} \, .
+\end{displaymath}
+If the offsets $\V j_0$ and $\V k_0$ have integer coordinates, another way
+to write this is:
+\begin{equation}
+  \FT{A}_{\V k + \V k_0} \approx \Delta r^2 \sum_{\V j \in \Omega}
+  A_{\V j + \V j_0} \,
+  \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}} \, ,
+\end{equation}
+where circular shift is used for translating the sampled arrays.  If the
+\emph{origin of coordinates} is defined following the usual convention,
+then the offsets $\V j_0$ and $\V k_0$ have integer coordinates and the
+equation becomes:
+\begin{align}
+  \FT{A}_{\V k} &\approx \Delta r^2 \,
+  \mathtt{fftshift}\Paren*{
+    \sum_{\V j \in \Omega}
+    \mathtt{ifftshift}\Paren*{\V A}_{\V j} \,
+  \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}}
+  }_{\V k} \\
+  &= \Delta r^2 \,\mathtt{fftshift}\Paren*{\mathtt{fft}\Paren*{
+    \mathtt{ifftshift}\Paren*{\V A}
+  }}_{\V k} \, ,
+\end{align}
+where $\V A$ denotes the array of sampled values of the complex amplitude
+in the pupil plane.
+
+% References
+\footnotesize
+\bibliography{journals-short,biblio}
+\bibliographystyle{spiebib}
+
+\end{document}

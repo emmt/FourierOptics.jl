@@ -1,0 +1,24 @@
+# Backup files:
+*~
+.#*
+
+# Binary files:
+*.gz
+*.pdf
+
+# Compiled files:
+*.o
+*.so
+lib*.a
+
+# LaTeX compiled files:
+doc/*.aux
+doc/*.bbl
+doc/*.blg
+doc/*.brf
+doc/*.log
+doc/*.out
+
+# Temporary directories:
+temp/
+tmp/
