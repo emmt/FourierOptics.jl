@@ -6,12 +6,49 @@
 This package provides the building blocks for numerical simulations of an
 optical system using Fourier optics approximations.
 
+This file provides some documentation:
+
+* [Installation](#installation) of the package;
+* [Simple coordinate transforms](#simple_coordinate_transforms);
+* [Physical units](#physical_units) used in the package;
+
+
+## Installation
+
+[**FourierOptics**](https://github.com/emmt/FourierOptics.jl) is not yet an
+[offical Julia package](https://pkg.julialang.org/) but it is easy to install
+from the [julia REPL](https://docs.julialang.org/en/stable/manual/interacting-with-julia/) with one of the following commands (depending which of *https* or *ssh* is the most suitable for you):
+
+```julia
+# for https:
+Pkg.clone("https://github.com/emmt/FourierOptics.jl.git")
+# or for ssh:
+Pkg.clone("git@github.com:emmt/FourierOptics.jl.git")
+```
+
+note that there is no needs to call `Pkg.build("FourierOptics")` after.
+
+To check whether the **FourierOptics** package works correctly:
+
+```julia
+Pkg.test("FourierOptics")
+```
+
+To update to the last version, just type:
+
+```julia
+Pkg.update()
+```
+
+and perhaps test again...
+
 
 ## Simple coordinate transforms
 
 A simple 2D coordinate transform is created by:
 
 ```julia
+using FourierOptics
 C = CoordinateTransform(stp, x0, y0)
 ```
 
@@ -51,7 +88,8 @@ A = (tx, ty) + C  # A(u, v) = C(u, v) +. (tx, ty)
 A = [tx, ty] + C  # A(u, v) = C(u, v) +. [tx, ty]
 ```
 
-the `-` operator can also be used to apply the opposite pre/post translation.
+where `ρ` is some scalar factor.  The `-` operator can be used like `+` to
+apply the opposite pre/post translation.
 
 Two coordinate transforms `A` and `B` can be composed as follows:
 
@@ -60,10 +98,10 @@ C = A ∘ B
 ```
 
 to form a new coordinate transform, `C` such that `C(u,v) = A(B(u,v))`.
-Operators `\\` and  `/` can be used for left/right *division*:
+Operators `\` and  `/` can be used for left/right *division*:
 
 ```julia
-A\\B = inv(A) ∘ B
+A\B = inv(A) ∘ B
 A/B = A ∘ inv(B)
 ```
 
@@ -73,38 +111,37 @@ Two coordinate transforms `A` and `B` can be approximately compared:
 A ≈ B
 ```
 
-Coordinate transforms can therefore be built starting with the identity:
+Using all this, coordinate transforms can be built starting with the identity:
 
 ```julia
 I = CoordinateTransform()
 C = (x0, y0) + stp*I
 ```
 
+which may be more readable in the code.
 
-## Installation
 
-[**FourierOptics**](https://github.com/emmt/FourierOptics.jl) is not yet an
-[offical Julia package](https://pkg.julialang.org/) but it is easy to install
-from the [julia REPL](https://docs.julialang.org/en/stable/manual/interacting-with-julia/) as follows:
+## Physical units
 
-```julia
-Pkg.clone("https://github.com/emmt/FourierOptics.jl.git")
-```
+In the [FourierOptics](https://github.com/emmt/FourierOptics.jl) module, all
+physical units (only lengths and angles are needed) are assumed to be in SI
+units (hence lengths are in meters, angles are in radians, *etc.*).
 
-which uses `https` protocol (note that there is no needs to call
-`Pkg.build("FourierOptics")`); if `ssh` is more suitable for you, then use
-the URI `git@github.com:emmt/FourierOptics.jl.git` instead.
-
-To check whether the **FourierOptics** package works correctly:
+To use short symbolic units names, just do:
 
 ```julia
-Pkg.test("FourierOptics")
+using FourierOptics.Units
 ```
 
-To update to the last version, just type:
+to be able to define physical parameters with a readable syntax.  For instance
+`λ = 500nm` or `λ = 0.5µm` to define a wavelength, or `f = 15.2mm` to define a
+focal length.
 
-```julia
-Pkg.update()
-```
+Exported units are:
 
-and perhaps test again...
+* lengths: `m` (meters), `cm` (centimeters), `mm` (millimeters), `µm`
+  (micrometers), `nm` (nanometers);
+
+* angles: `rd` (radians), `deg` or `arcdeg` (degrees of arc), `arcmin` (minutes
+  of arc), `arcsec` (seconds of arc), `marcsec` or `mas` (milliarcseconds),
+  `µarcsec` or `µas` (microarcseconds).
