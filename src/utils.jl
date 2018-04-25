@@ -122,3 +122,44 @@ function circularmask!(M::AbstractArray{Tm,N},
 end
 
 @doc @doc(circularmask) circularmask!
+
+"""
+```julia
+fftshiftphasor([T,] s, n)
+```
+
+yields a vector of `n` complexes whose elements have values `exp(2*i*π*k*s/n)`
+for `k ∈ fftfreq(n)`.  Optional argument `T` is the floating-point type of the
+real and imaginary parts of the returned complexes (`Float64` by default).
+
+"""
+fftshiftphasor(s::Real, n::Integer) =
+    fftshiftphasor(Float64, s, n)
+
+fftshiftphasor(::Type{T}, s::Real, n::Integer)  where {T<:AbstractFloat} =
+    fftshiftphasor!(Array{Complex{T}}(n), s)
+
+function fftshiftphasor!(dst::AbstractVector{Complex{T}},
+                         s::Real) where {T<:AbstractFloat}
+    # For fractional shifts, it is important to use the signed discrete
+    # frequency index.
+    len = length(dst)
+    n = div(len, 2)
+    α = convert(T, 2π*s/len)
+    @inbounds @simd for k in 1:len-n
+        ϕ = α*(k - 1)
+        dst[k] = complex(cos(ϕ), sin(ϕ))
+    end
+    l = len + 1
+    @inbounds @simd for k in len-n+1:len
+        ϕ = α*(k - l)
+        dst[k] = complex(cos(ϕ), sin(ϕ))
+    end
+    if iseven(len)
+        # Treat the Nyquist frequency specifically for a slight gain in
+        # precision.
+        k = n + 1
+        dst[k] = real(dst[k])
+    end
+    return dst
+end

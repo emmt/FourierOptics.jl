@@ -8,7 +8,9 @@ module FourierOptics
 
 export
     circularmask,
-    circularmask!
+    circularmask!,
+    fftshiftphasor,
+    fftshiftphasor!
 
 include("utils.jl")
 
