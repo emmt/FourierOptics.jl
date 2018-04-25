@@ -9,9 +9,9 @@ optical system using Fourier optics approximations.
 This file provides some documentation:
 
 * [Installation](#installation) of the package;
-* [Simple coordinate transforms](#simple_coordinate_transforms);
-* [Physical units](#physical_units) used in the package;
-* [Physical regions](#physical_regions);
+* [Simple coordinate transforms](#simple-coordinate-transforms);
+* [Physical units](#physical-units) used in the package;
+* [Physical regions](#physical-regions);
 
 
 ## Installation
