@@ -39,7 +39,7 @@ C((u, v)) -> (x, y)
 C([u, v]) -> [x, y]
 ```
 
-Coordinate transforms may be inverted, pre/post-scaled, pre-post-translated:
+Coordinate transforms may be inverted, pre/post-scaled, pre/post-translated:
 
 ```julia
 A = inv(C)        # A(C(u,v)) = (u,v) and C(A(x,y)) = (x,y)

@@ -38,7 +38,7 @@ C((u, v)) -> (x, y)
 C([u, v]) -> [x, y]
 ```
 
-Coordinate transforms may be inverted, pre/post-scaled, pre-post-translated:
+Coordinate transforms may be inverted, pre/post-scaled, pre/post-translated:
 
 ```julia
 A = inv(C)        # A(C(u,v)) = (u,v) and C(A(x,y)) = (x,y)
@@ -50,7 +50,8 @@ A = (tx, ty) + C  # A(u, v) = C(u, v) +. (tx, ty)
 A = [tx, ty] + C  # A(u, v) = C(u, v) +. [tx, ty]
 ```
 
-the `-` operator can also be used to apply the opposite pre/post translation.
+where `ρ` is some scalar factor.  The `-` operator can be used like `+` to
+apply the opposite pre/post translation.
 
 Two coordinate transforms `A` and `B` can be composed as follows:
 
@@ -59,7 +60,7 @@ C = A ∘ B
 ```
 
 to form a new coordinate transform, `C` such that `C(u,v) = A(B(u,v))`.
-Operators `\\` and  `/` can be used for left/right "division":
+Operators `\\` and  `/` can be used for left/right *division*:
 
 ```julia
 A\\B = inv(A) ∘ B
