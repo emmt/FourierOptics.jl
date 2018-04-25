@@ -25,6 +25,9 @@ import .CoordinateTransforms:
     jacobian,
     origin
 
+include("regions.jl")
+using .Regions
+
 include("utils.jl")
 
 end # module

@@ -11,6 +11,7 @@ This file provides some documentation:
 * [Installation](#installation) of the package;
 * [Simple coordinate transforms](#simple_coordinate_transforms);
 * [Physical units](#physical_units) used in the package;
+* [Physical regions](#physical_regions);
 
 
 ## Installation
@@ -145,3 +146,70 @@ Exported units are:
 * angles: `rd` (radians), `deg` or `arcdeg` (degrees of arc), `arcmin` (minutes
   of arc), `arcsec` (seconds of arc), `marcsec` or `mas` (milliarcseconds),
   `µarcsec` or `µas` (microarcseconds).
+
+
+## Physical regions
+
+A `Region` defines a sampled rectangular piece of physical plane perpendicular
+to the direction of propagation.  The sampling step is the same in all
+direction and the grid axes are aligned with the `(x,y)` axes of the world
+coordinate system (axis `z` is assumed to be the direction of propagation).
+
+A `Region` can be defined by:
+
+```julia
+Region(width, height, step=1m)
+```
+
+where `width`, `height` and `step` are the physical dimensions and sampling
+step (all lengths in SI units, that is meters) and which yields a region
+centered at the origin.  The bounding box (see below) of the resulting region
+will be at least of size `width` by `height`.  Another possibility is to use
+two instances of `Range` to define the coordinates of the grid of samples along
+the two axes:
+
+```julia
+Region(X, Y)
+```
+
+Because of rounding errors, the effective grid of samples embedded into the
+resulting region may have slightly different coordinates.
+
+A region can be *translated* or *recentered*:
+
+```julia
+R = Region(X, Y)          # define a region
+Rt = R + (tx, ty)         # translate the region
+Rc = recenter(R)          # recenter the region (0,0)
+Rc = recenter(R, (x0,y0)) # recenter the region at (x0, y0)
+```
+
+A number of coordinate transformations can be performed:
+
+```julia
+R = Region(X, Y)              # define a region
+grid2world(R, (i,j)) -> x, y  # get the world coordinates of a grid node
+world2grid(R, (x,y)) -> i, j  # get the grid indices from world coordinates
+```
+
+Above, `(x,y)` denotes physical (*world*) coordinates and `(i,j)` denotes,
+possibly fractional, grid indices.
+
+Some information can be retrieved from the region instance:
+
+```julia
+R = Region(X, Y)  # define a region
+length(R)         # yields the number of samples
+size(R)           # yields the dimensions (in number of samples) of the region
+size(R, i)        # yields the i-th dimension
+step(R)           # yields the sampling step (in meters)
+grid2world(R)     # yields the grid to world coordinate transformation
+world2grid(R)     # yields the world to grid coordinate transformation
+extrema(R)        # yields the extreme positions `(xmin,xmax,ymin,ymax)`
+boundingbox(R)    # yields the bounding box of the region
+center(R)         # yields the physical coordinates of the center of R
+```
+
+Compared to `extrema(R)` which yields the extreme world positions `(xmin, xmax,
+ymin, ymax)` of the embedded grid nodes, `boundingbox(R)` accounts for an
+additional margin of 1/2 sample on all sides.
