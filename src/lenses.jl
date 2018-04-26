@@ -4,6 +4,10 @@
 # Implement lenses model.
 #
 
+const FloatingPoint = Float64
+floatingpoint(x::NTuple{N,Real}) where {N} = convert(NTuple{N,FloatingPoint}, x)
+floatingpoint(x::Real) = convert(FloatingPoint, x)
+
 Base.show(io::IO, ::MIME"text/plain", L::Lens) = show(io, L)
 Base.show(io::IO, ::MIME"text/plain", A::LensOperator) = show(io, A)
 
@@ -82,53 +86,53 @@ center(L::Lens) = (L.x0, L.y0)
 
 """
 ```julia
-LensOperator(L, P, λ, n)
+LensOperator(L, P, λ, n, out_off=((n-1)/2,(n-1)/2))
 ```
 
 yields a linear operator to propagate the complex amplitude from a pupil plane
 `P` through a lens `L` to its focal plane.  `λ` is the wavelength (in SI units)
 and `n` is the size of the output region in the focal plane and centered at the
-lens center.
+lens center.  Argument `out_off` specifies the offsets (in fractional grid
+units) of the lens optical axis in the output region.  The default is to have
+it geometrically centered.
 
 """
-function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer)
+function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer,
+                      out_off::NTuple{2,Real} = ((n - 1)/2, (n - 1)/2))
     # Get the bounding box of the part of the input which encompass the pupil.
-    # FIXME: There seem to be 1-2 extra pixels.
-    dr = step(Rinp)
-    if diameter(L) > n*dr/2
-        error("there will be aliasing")
-    end
-    n1, n2 = size(Rinp)
+    dr = abs(step(Rinp))
+    nx, ny = size(Rinp)
     x0, y0 = center(L)
     r1 = (diameter(L) - dr)/2
     r2 = (diameter(L) + dr)/2
-    i0, j0 = floor.(Int, world2grid(Rinp, x0 - r2, y0 - r2))
-    i1, j1 =  ceil.(Int, world2grid(Rinp, x0 + r2, y0 + r2))
-    if ! (1 ≤ i0 ≤ i1 ≤ n1 && 1 ≤ j0 ≤ j1 ≤ n2)
+    imin, jmin = world2grid(Rinp, x0 - r2, y0 - r2)
+    imax, jmax = world2grid(Rinp, x0 + r2, y0 + r2)
+    i0 =  ceil(Int, nextfloat(imin))
+    j0 =  ceil(Int, nextfloat(jmin))
+    i1 = floor(Int, prevfloat(imax))
+    j1 = floor(Int, prevfloat(jmax))
+    if nx < 2(i1 - i0 + 1) || ny < 2(j1 - j0 + 1)
+        error("there will be aliasing (choose n ≥ ",
+              2max(i1 - i0, j1 - j0) + 2, ")")
+    end
+    if ! (1 ≤ i0 ≤ i1 ≤ nx && 1 ≤ j0 ≤ j1 ≤ ny)
         error("there is some vignetting!")
     end
 
     # Compute the offset (in fractional samples) of the lens center w.r.t. the
     # origin of the extracted part (which is also the origin for the FFT).
-    inpoff1, inpoff2 = world2grid(Rinp, x0, y0) .- (i0, j0)
+    inp_off = world2grid(Rinp, x0, y0) .- (i0, j0)
+
+    # Compute pre/post-phase modulations.
+    (Ipre, Ipost, Iout,
+     Jpre, Jpost, Jout) = computeshiftphasors(inp_off, out_off, n)
 
     # Define the output region so that it is centered on the window computed by
     # FFT and has the same size.
-    ds = convert(Float64, focal_length(L)*lambda/(n*dr)) # ouput step
-    outoff1 = outoff2 = (n - 1)/2
-    s = ds*(n - 1)/2 # half-width of output region between first and last nodes
-    Xout = linspace(-s, +s, n)
-    Yout = linspace(-s, +s, n)
-    Rout = Region(Xout, Yout)
+    fλ = convert(Float64, focal_length(L)*lambda)
+    ds = fλ/convert(Float64, n*dr) # ouput step
+    Rout = Region(x0 + ds*Iout, y0 + ds*Jout)
 
-    # Pre-phase modulation to translate the output.
-    preshift1 = fftshiftphasor(outoff1, n)
-    preshift2 = fftshiftphasor(outoff2, n)
-
-    # Post-phase modulation to compensate the off-centering of the pupil.
-    η = 2π*dr/(focal_length(L)*lambda)
-    postshift1 = phasor(Complex{Float64}, η*inpoff1, Xout)
-    postshift2 = phasor(Complex{Float64}, η*inpoff2, Yout)
 
     alpha = Float64(dr^2)/Float64(focal_length(L)*lambda)
     Qinp = Array{Complex{Float64}}(i1 - i0 + 1, j1 - j0 + 1)
@@ -142,7 +146,7 @@ function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer)
                 Qinp[k] = 0
             else
                 rho = (r ≤ r1 ? alpha : alpha*(r2 - r)/dr)
-                Qinp[k] = rho*preshift1[i - i0 + 1]*preshift2[j - j0 + 1]
+                Qinp[k] = rho*Ipre[i - i0 + 1]*Jpre[j - j0 + 1]
             end
         end
     end
@@ -150,7 +154,7 @@ function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer)
     Qout = Array{Complex{Float64}}(n, n)
     @inbounds for j in 1:n
         @simd for i in 1:n
-            Qout[i,j] = postshift1[i]*postshift2[j]
+            Qout[i,j] = Ipost[i]*Jpost[j]
         end
     end
 
@@ -163,6 +167,54 @@ function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer)
                         Rout, Qout,
                         F, ws)
 
+end
+
+function fftfreq(_dim::Integer)
+    dim = Int(_dim)
+    n = div(dim, 2)
+    f = Array{Int}(dim)
+    @inbounds begin
+        for k in 1:dim-n
+            f[k] = k - 1
+        end
+        for k in dim-n+1:dim
+            f[k] = k - (1 + dim)
+        end
+    end
+    return f
+end
+
+function computeshiftphasors(inp_off::NTuple{2,Float64},
+                             out_off::NTuple{2,Float64},
+                             n::Int)
+    # Pre-phase modulation to translate the output.
+    Iinp = Jinp = fftfreq(n)
+    Ipre = phasor(Complex{Float64}, (2π*out_off[1]/n), Iinp)
+    Jpre = phasor(Complex{Float64}, (2π*out_off[2]/n), Jinp)
+    if iseven(n)
+        # Treat the Nyquist frequency specifically for a slight gain in
+        # precision.
+        k = (n >> 1) + 1
+        Ipre[k] = real(Ipre[k])
+        Jpre[k] = real(Jpre[k])
+    end
+
+    # Post-phase modulation to compensate the off-centering of the input.
+    Iout = linspace(1, n, n) - (1 + out_off[1])
+    Jout = linspace(1, n, n) - (1 + out_off[2])
+    Ipost = phasor(Complex{Float64}, (2π*inp_off[1]/n)*Iout)
+    Jpost = phasor(Complex{Float64}, (2π*inp_off[2]/n)*Jout)
+
+    return (Ipre, Ipost, Iout,
+            Jpre, Jpost, Jout)
+end
+
+function computeshiftphasors(inp_off::NTuple{2,Real},
+                             out_off::NTuple{2,Real},
+                             n::Integer)
+    return computeshiftphasors(convert(NTuple{2,Float64}, inp_off),
+                               convert(NTuple{2,Float64}, out_off),
+                               convert(Int, n))
 end
 
 function LazyAlgebra.vcreate(::Type{Direct}, A::LensOperator,
@@ -207,7 +259,6 @@ function LazyAlgebra.apply!(alpha::Real, ::Type{Direct}, A::LensOperator,
         end
 
         # Compute complex amplitude in the focal plane.
-        println(size(ws))
         A_mul_B!(ws, A.FFT, ws)
         Qout = A.Qout
         if beta == 0
