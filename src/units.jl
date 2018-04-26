@@ -21,6 +21,8 @@ length.
 module Units
 
 export
+    showlength,
+    showposition,
     m, cm, mm, µm, nm,
     rd, deg, arcdeg, arcmin, arcsec, marcsec, µarcsec, mas, µas
 
@@ -41,5 +43,47 @@ const µarcsec = 1E-6arcsec
 const deg = arcdeg
 const mas = marcsec
 const µas = µarcsec
+
+"""
+```julia
+showlength(io, x)
+```
+
+prints length `x` (assumed to be in SI units, that is meters) to `io`
+in a human readable way.
+
+"""
+function showlength(io::IO, x::Real)
+    a = abs(x)
+    if 1mm ≤ a < 1m
+        print(io, @sprintf("%.6gmm", x/1mm))
+    elseif 1µm ≤ a < 1mm
+        print(io, @sprintf("%.6gµm", x/1µm))
+    elseif 1nm ≤ a < 1µm
+        print(io, @sprintf("%.6gµm", x/1nm))
+    else
+        print(io, @sprintf("%.6gm", x/1m))
+    end
+end
+
+showlength(io::IO, x::Union{Rational,Irrational}) =
+    showlength(io, convert(Float64, x))
+
+"""
+```julia
+showposition(io, (x,y))
+```
+
+prints position `(x,y)` (both coordinates are assumed to be in SI units, that
+is meters) to `io` in a human readable way.
+
+"""
+function showposition(io::IO, c::NTuple{2,Union{Real,Rational,Irrational}})
+    print(io, "(")
+    showlength(io, c[1])
+    print(io, ",")
+    showlength(io, c[2])
+    print(io, ")")
+end
 
 end
