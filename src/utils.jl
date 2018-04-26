@@ -129,15 +129,18 @@ fftshiftphasor([T,] s, n)
 ```
 
 yields a vector of `n` complexes whose elements have values `exp(2*i*π*k*s/n)`
-for `k ∈ fftfreq(n)`.  Optional argument `T` is the floating-point type of the
-real and imaginary parts of the returned complexes (`Float64` by default).
+for `k ∈ fftfreq(n)`.  Optional argument `T <: Complex{<:AbstractFloat}` is the
+type of the elements of the result.  By default, `T =
+Complex{float(typeof(s))}`.
 
 """
-fftshiftphasor(s::Real, n::Integer) =
-    fftshiftphasor(Float64, s, n)
+fftshiftphasor(s::T, n::Integer) where {T<:Real} =
+    fftshiftphasor(Complex{float(T)}, s, n)
 
-fftshiftphasor(::Type{T}, s::Real, n::Integer)  where {T<:AbstractFloat} =
+function fftshiftphasor(::Type{Complex{T}}, s::Real,
+                        n::Integer) where {T<:AbstractFloat}
     fftshiftphasor!(Array{Complex{T}}(n), s)
+end
 
 function fftshiftphasor!(dst::AbstractVector{Complex{T}},
                          s::Real) where {T<:AbstractFloat}
@@ -160,6 +163,45 @@ function fftshiftphasor!(dst::AbstractVector{Complex{T}},
         # precision.
         k = n + 1
         dst[k] = real(dst[k])
+    end
+    return dst
+end
+
+phasor(phi::AbstractArray{T,N}) where {T<:Real,N} =
+    phasor(Complex{float(T)}, phi)
+
+function phasor(::Type{Complex{T}},
+                phi::AbstractArray{<:Real,N}) where {T<:AbstractFloat,N}
+    phasor!(Array{Complex{T}}(size(phi)), phi)
+end
+
+function phasor!(dst::AbstractArray{Complex{T},N},
+                 phi::AbstractArray{<:Real,N}) where {T<:AbstractFloat,N}
+    @assert size(dst) == size(phi)
+    @inbounds @simd for k in eachindex(dst, phi)
+        ϕ = convert(T, phi[k])
+        dst[k] = complex(cos(ϕ), sin(ϕ))
+    end
+    return dst
+end
+
+phasor(alpha::Ta, X::AbstractArray{Tx,N}) where {Ta<:Real,Tx<:Real,N} =
+    phasor(Complex{float(promote_type(Ta, Tx))}, alpha, X)
+
+function phasor(::Type{Complex{T}},
+                alpha::Real,
+                X::AbstractArray{<:Real,N}) where {T<:AbstractFloat,N}
+    phasor!(Array{Complex{T}}(size(X)), alpha, X)
+end
+
+function phasor!(dst::AbstractArray{Complex{T},N},
+                 alpha::Real,
+                 X::AbstractArray{<:Real,N}) where {T<:AbstractFloat,N}
+    @assert size(dst) == size(X)
+    α = convert(T, alpha)
+    @inbounds @simd for k in eachindex(dst, X)
+        ϕ = α*convert(T, X[k])
+        dst[k] = complex(cos(ϕ), sin(ϕ))
     end
     return dst
 end
