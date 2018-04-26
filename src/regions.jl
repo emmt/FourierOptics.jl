@@ -9,12 +9,12 @@ module Regions
 export
     Region,
     boundingbox,
-    center,
     grid2world,
-    recenter,
     world2grid
 
+import ...FourierOptics: center, recenter
 using ..CoordinateTransforms
+using ..Units
 
 """
 
@@ -26,7 +26,7 @@ coordinate system (axis `z` is assumed to be the direction of propagation).
 A `Region` can be defined by:
 
 ```julia
-Region(width, height, step=1m)
+Region(width, height, step=1mm)
 ```
 
 where `width`, `height` and `step` are the physical dimensions and sampling
@@ -39,6 +39,17 @@ the two axes:
 ```julia
 Region(X, Y)
 ```
+
+Finally, the following keyword-only constructor is available:
+
+```julia
+Region(; size=(nx,ny), step=stp, center=(xc,yc))
+```
+
+where `nx` and `ny` are the number of grid nodes along the dimensions of the
+region (both are `100` by default), `stp` is the sampling step size (`1mm` by
+default) and `(xc,yc)` are the coordinates of the geometrical center of the
+region (`(0mm,0mm)` by default).
 
 Because of rounding errors, the effective grid of samples embedded into the
 resulting region may have slightly different coordinates.
@@ -101,7 +112,30 @@ world2grid(R::Region) = R.w2i
 world2grid(R::Region, args...) = R.w2i(args...)
 Base.step(R::Region) = step(grid2world(R))
 
-function Region(width::Real, height::Real, step::Real=1m)
+Base.show(io::IO, ::MIME"text/plain", R::Region) = show(io, R)
+
+function Base.show(io::IO, R::Region)
+    print(io, "Region(size = $(size(R)), step = ")
+    showlength(io, step(R))
+    print(io, ", center = ")
+    showposition(io, center(R))
+    print(io, ")")
+end
+
+# Keyword-only constructor (to look like the output of the show method).
+function Region(;
+                size::NTuple{2,Integer} = (100,100),
+                step::Real = 1mm,
+                center::NTuple{2,Union{Real,Rational,Irrational}} = (0mm, 0mm))
+    nx, ny = size
+    xc, yc = center
+    dx = step*(nx - 1)/2
+    dy = step*(ny - 1)/2
+    return Region(linspace(xc - dx, xc + dx, nx),
+                  linspace(yc - dy, yc + dy, ny))
+end
+
+function Region(width::Real, height::Real, step::Real=1mm)
     # Build a large enough region centered at (0,0).
     n1 = ceil(Int, width/step)
     n2 = ceil(Int, height/step)
@@ -120,15 +154,14 @@ function Region(X::Range{Tx}, Y::Range{Ty}) where {Tx<:Real,Ty<:Real}
     stp = (xstp + ystp)/2
 
     # Get the number of samples along each side.
-    n1 = ceil(Int, (last(X) - first(X))/stp) + 1
-    n2 = ceil(Int, (last(Y) - first(Y))/stp) + 1
+    nx, ny = length(X), length(Y)
 
     # Compute the offsets so as to keep the central position.
-    x0 = ((first(X) - stp) + (last(X) - n1*stp))/2
-    y0 = ((first(Y) - stp) + (last(Y) - n2*stp))/2
+    x0 = ((first(X) - stp) + (last(X) - nx*stp))/2
+    y0 = ((first(Y) - stp) + (last(Y) - ny*stp))/2
 
     # Build the region using the inner constructor.
-    return Region((n1, n2), CoordinateTransform(stp, x0, y0))
+    return Region((nx, ny), CoordinateTransform(stp, x0, y0))
 end
 
 """
