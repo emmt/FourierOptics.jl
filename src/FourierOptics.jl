@@ -19,7 +19,7 @@ export
     recenter
 
 using LazyAlgebra
-import LazyAlgebra: Complexes, Reals, vcreate, apply!
+import LazyAlgebra: Complexes, Reals
 
 using AbstractFFTs
 import FFTW
@@ -41,6 +41,8 @@ import .CoordinateTransforms:
 include("regions.jl")
 using .Regions
 
+include("types.jl")
 include("utils.jl")
+include("lenses.jl")
 
 end # module
