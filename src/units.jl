@@ -60,7 +60,7 @@ function showlength(io::IO, x::Real)
     elseif 1µm ≤ a < 1mm
         print(io, @sprintf("%.6gµm", x/1µm))
     elseif 1nm ≤ a < 1µm
-        print(io, @sprintf("%.6gµm", x/1nm))
+        print(io, @sprintf("%.6gnm", x/1nm))
     else
         print(io, @sprintf("%.6gm", x/1m))
     end
