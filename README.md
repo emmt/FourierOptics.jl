@@ -1,7 +1,7 @@
 # Julia package for Fourier optics simulations
 
 [![License](http://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)](LICENSE.md)
-[![Build Status](https://travis-ci.org/emmt/FourierOptics.jl.svg?branch=master)](https://travis-ci.org/emmt/FourierOptics.jl)
+[![Build Status](https://travis-ci.com/emmt/FourierOptics.jl.svg?branch=master)](https://travis-ci.com/emmt/FourierOptics.jl)
 
 This package provides the building blocks for numerical simulations of an
 optical system using Fourier optics approximations.
