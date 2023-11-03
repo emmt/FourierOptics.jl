@@ -1,69 +1,46 @@
-isdefined(:FourierOptics) || include("../src/FourierOptics.jl")
-
-module TestFourierOptics
-
-using Base.Test
-
 using FourierOptics
-using FourierOptics.CoordinateTransforms
-using FourierOptics.Regions
+using Test
+using Unitful
 
-Base.isapprox(x::NTuple{2,Real}, y::NTuple{2,Real}; kwds...) =
-    (isapprox(x[1], y[1]; kwds...) && isapprox(x[2], y[2]; kwds...))
+@testset "FourierOptics.jl" begin
+    @testset "Utilities" begin
+        @test one(Float32)*u"m" isa FourierOptics.Meters{Float32}
+        @test FourierOptics.standard_length(1m) === 1.0
+        @test FourierOptics.standard_length(Float32, 1m) === 1.0f0
+        @test FourierOptics.standard_length(200cm) === 2.0
+        @test FourierOptics.standard_length(Float32, 3000mm) === 3.0f0
 
-Base.isapprox(x::NTuple{4,Real}, y::NTuple{4,Real}; kwds...) =
-    (isapprox(x[1], y[1]; kwds...) && isapprox(x[2], y[2]; kwds...) &&
-     isapprox(x[3], y[3]; kwds...) && isapprox(x[4], y[4]; kwds...))
+        # Infinity
+        let infinity = FourierOptics.infinity
+            @test infinity(0.0) === Inf
+            @test infinity(Float32) === Inf32
+            @test infinity(1.0m) === Inf*m
+            @test_throws Exception infinity(42)
+            @test_throws Exception infinity(42μm)
+        end
+    end
+    @testset "Fields" begin
+        n = 16
+        λ = 3μm
+        Δx = 0.1mm
+        F = @inferred Field(grid_size=n, wavelength=λ, grid_step=Δx)
+        @test eltype(F) == Complex{Float64}
+        @test ndims(F) == 2
+        @test size(F) == (n, n)
+        @test axes(F) == (1:n, 1:n)
+        @test F[1,1] === 1.0 + 0.0im
+        F[end,end] = 0
+        @test F[n,n] === 0.0 + 0.0im
 
-@testset "Coordinate Transforms" begin
-    stp, x0, y0 = 1.2, -2.7, 3.1
-    t = (0.7, -1.8)
-    p = (0.9, 11.0)
-    α = 0.17
-    I = CoordinateTransform()
-    A = CoordinateTransform(stp, x0, y0)
-    B = inv(A)
-    @test origin(A) ≈ (x0, y0)
-    @test step(A) ≈ stp
-    @test A ≈ (x0,y0) + stp*I
-    @test A∘B ≈ I  atol=4*eps(Float64)
-    @test B∘A ≈ I  atol=4*eps(Float64)
-    @test A/A ≈ I  atol=4*eps(Float64)
-    @test A\A ≈ I  atol=4*eps(Float64)
-    B = t + A
-    @test B(p) ≈ t .+ A(p)
-    @test (t - A)(p) ≈ t .- A(p)
-    @test (A + t)(p) ≈ A(p .+ t)
-    @test (A - t)(p) ≈ A(p .- t)
-    @test (α*A)(p) ≈ α.*A(p)
-    @test (A*α)(p) ≈ A(α.*p)
-end
-
-@testset "Regions" begin
-    stp, xc, yc = 1.2, -2.7, 3.1
-    n1, n2 = 27, 52
-    c = 0.7, -1.1
-    grdxmin = xc - (n1 - 1)*stp/2
-    grdxmax = xc + (n1 - 1)*stp/2
-    grdymin = yc - (n2 - 1)*stp/2
-    grdymax = yc + (n2 - 1)*stp/2
-    boxxmin = xc - n1*stp/2
-    boxxmax = xc + n1*stp/2
-    boxymin = yc - n2*stp/2
-    boxymax = yc + n2*stp/2
-    X = linspace(grdxmin, grdxmax, n1)
-    Y = linspace(grdymin, grdymax, n2)
-    R1 = Region(X, Y)
-    @test center(R1) ≈ (xc, yc)
-    @test step(R1) ≈ stp
-    @test size(R1) ≈ (n1, n2)
-    @test extrema(R1) ≈ (grdxmin, grdxmax, grdymin, grdymax)
-    @test boundingbox(R1) ≈ (boxxmin, boxxmax, boxymin, boxymax)
-    R2 = recenter(R1)
-    @test center(R2) ≈ (0,0)
-    R2 = recenter(R1, c)
-    @test center(R2) ≈ c
-    @test center(R2 - c) ≈ (0,0)
-end
-
+        # Test copy constructor.
+        for j in eachindex(F) # make sure that the complex amplitude is not just ones
+            F[j] = complex(j, -j)
+        end
+        Fcpy = @inferred copy(F)
+        @test typeof(Fcpy) === typeof(F)
+        @test FourierOptics.get_amplitude(Fcpy) !== FourierOptics.get_amplitude(F)
+        for key in fieldnames(typeof(F))
+            @test getfield(F, key) === getfield(Fcpy, key) || getfield(F, key) == getfield(Fcpy, key)
+        end
+    end
 end

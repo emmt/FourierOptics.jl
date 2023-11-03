@@ -1,55 +1,33 @@
-#
-# FourierOptics.jl -
-#
-# Tools for Fourier optics computations in Julia.
-#
-
-__precompile__(true)
-
 module FourierOptics
 
 export
-    CoordinateTransform,
-    Lens,
-    LensOperator,
-    Region,
-    center,
-    diameter,
-    circularmask!,
-    circularmask,
-    fftshiftphasor!,
-    fftshiftphasor,
-    focal_length,
-    grid2world,
-    recenter,
-    world2grid
+    # Exports from this package.
+    Angle,
+    Field,
+    propagate,
+    propagate!,
 
-using LazyAlgebra
-import LazyAlgebra: Complexes, Reals
+    # Exports from Unitful.
+    Length,
+    °, rad,
+    km, m, cm, mm, µm, nm
 
-using AbstractFFTs
-import FFTW
+using Unitful
+using Unitful:
+    Length,
+    °, rad,
+    km, m, cm, mm, µm, nm
 
-# Declaration of functions to be extended by sub-modules.
-function center end
-function recenter end
+using AbstractFFTs, FFTW
+import AbstractFFTs: Plan, fftshift, ifftshift
 
-include("units.jl")
-using .Units
-
-include("coords.jl")
-import .CoordinateTransforms:
-    CoordinateTransform,
-    compose,
-    jacobian,
-    origin
-
-include("regions.jl")
-using .Regions
+using TypeUtils
+using LinearAlgebra
 
 include("types.jl")
-include("basics.jl")
 include("utils.jl")
+include("fields.jl")
+include("propagate.jl")
 include("lenses.jl")
 
-end # module
+end

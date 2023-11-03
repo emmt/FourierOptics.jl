@@ -22,3 +22,10 @@ doc/*.out
 # Temporary directories:
 temp/
 tmp/
+v0/
+
+# Files automatically created by Julia:
+*.jl.*.cov
+*.jl.cov
+*.jl.mem
+/Manifest.toml
