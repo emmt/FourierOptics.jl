@@ -4,6 +4,14 @@
 # Types used in Fourier optics.
 #
 
+"""
+
+Positions in planes perpendicular to the direction of propagation are specified
+as tuples of two reals `(x,y)`.
+
+"""
+const Position = NTuple{2,Real}
+
 abstract type AbstractLens end
 
 struct Lens <: AbstractLens
@@ -29,4 +37,10 @@ struct LensOperator{Tl<:AbstractLens,
     Qout::Matrix{Complex{Cdouble}} # complex modulation in focal plane
     FFT::Tf                        # FFT plan
     ws::Matrix{Complex{Cdouble}}   # workspace for the FFT
+end
+
+struct ComplexAmplitude{T<:Complexes,M<:AbstractMatrix{<:Complexes}} <: AbstractMatrix{T}
+    amp::M          # the complex amplitude
+    R::Region       # physical plane
+    lambda::Float64 # wavelength (in meters)
 end

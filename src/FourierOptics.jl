@@ -10,13 +10,19 @@ module FourierOptics
 
 export
     CoordinateTransform,
+    Lens,
+    LensOperator,
     Region,
     center,
+    diameter,
     circularmask!,
     circularmask,
     fftshiftphasor!,
     fftshiftphasor,
-    recenter
+    focal_length,
+    grid2world,
+    recenter,
+    world2grid
 
 using LazyAlgebra
 import LazyAlgebra: Complexes, Reals
@@ -42,6 +48,7 @@ include("regions.jl")
 using .Regions
 
 include("types.jl")
+include("basics.jl")
 include("utils.jl")
 include("lenses.jl")
 

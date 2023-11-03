@@ -1,7 +1,7 @@
 #
 # regions.jl -
 #
-# Implment physical regions.
+# Implement physical regions.
 #
 
 module Regions
@@ -18,7 +18,7 @@ using ..Units
 
 """
 
-A `Region` defines a rectangular sampled piece of physical plane perpendicular
+A `Region` defines a sampled rectangular piece of physical plane perpendicular
 to the direction of propagation.  The sampling step is the same in all
 direction and the grid axes are aligned with the `(x,y)` axes of the world
 coordinate system (axis `z` is assumed to be the direction of propagation).
@@ -71,22 +71,22 @@ grid2world(R, (i,j)) -> x, y  # get the world coordinates of a grid node
 world2grid(R, (x,y)) -> i, j  # get the grid indices from world coordinates
 ```
 
-Here, `(x,y)` denotes physical (*world*) coordinates and `(i,j)` denotes,
-possibly fractional, grid indices.
+Here, `(x,y)` denotes physical (*world*) coordinates in SI units and `(i,j)`
+denotes, possibly fractional, grid indices.
 
 Some information can be retrieved from the region instance:
 
 ```julia
 R = Region(X, Y)  # define a region
-length(R)         # yields the number of samples
-size(R)           # yields the dimensions (in number of samples) of the region
-size(R, i)        # yields the i-th dimension
-step(R)           # yields the sampling step (in meters)
-grid2world(R)     # yields the grid to world coordinate transformation
-world2grid(R)     # yields the world to grid coordinate transformation
-extrema(R)        # yields the extreme positions `(xmin,xmax,ymin,ymax)`
-boundingbox(R)    # yields the bounding box of the region
-center(R)         # yields the physical coordinates of the center of R
+length(R)         # number of samples
+size(R)           # dimensions (in number of samples) of the region
+size(R, i)        # i-th dimension
+step(R)           # sampling step (in SI units, i.e. meters)
+grid2world(R)     # grid to world coordinate transformation
+world2grid(R)     # world to grid coordinate transformation
+extrema(R)        # extreme positions `(xmin,xmax,ymin,ymax)`
+boundingbox(R)    # bounding box of the region
+center(R)         # physical coordinates of the center of R
 ```
 
 Compared to `extrema(R)` which yields the extreme world positions `(xmin, xmax,
@@ -111,6 +111,9 @@ grid2world(R::Region, args...) = R.i2w(args...)
 world2grid(R::Region) = R.w2i
 world2grid(R::Region, args...) = R.w2i(args...)
 Base.step(R::Region) = step(grid2world(R))
+
+Base.:(==)(A::Region, B::Region) =
+    (A.sz == B.sz && A.i2w == B.i2w)
 
 Base.show(io::IO, ::MIME"text/plain", R::Region) = show(io, R)
 

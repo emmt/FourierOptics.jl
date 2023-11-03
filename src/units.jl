@@ -55,7 +55,7 @@ in a human readable way.
 """
 function showlength(io::IO, x::Real)
     a = abs(x)
-    if 1mm ≤ a < 1m
+    if a == 0 || 1mm ≤ a < 1m
         print(io, @sprintf("%.6gmm", x/1mm))
     elseif 1µm ≤ a < 1mm
         print(io, @sprintf("%.6gµm", x/1µm))

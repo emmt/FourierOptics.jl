@@ -86,6 +86,18 @@ center(L::Lens) = (L.x0, L.y0)
 
 """
 ```julia
+recenter(L, (x0,y0))
+```
+
+yields a lens `L` centered at coordinates `(x0, y0)` (in SI units, that is
+meters).
+
+"""
+recenter(L::Lens, center::NTuple{2,Real}) =
+    Lens(focal_length(L), diameter(L), center[1], center[2])
+
+"""
+```julia
 LensOperator(L, P, λ, n, out_off=((n-1)/2,(n-1)/2))
 ```
 
@@ -133,7 +145,6 @@ function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer,
     ds = fλ/convert(Float64, n*dr) # ouput step
     Rout = Region(x0 + ds*Iout, y0 + ds*Jout)
 
-
     alpha = Float64(dr^2)/Float64(focal_length(L)*lambda)
     Qinp = Array{Complex{Float64}}(i1 - i0 + 1, j1 - j0 + 1)
     k = 0
@@ -168,6 +179,12 @@ function LensOperator(L::Lens, Rinp::Region, lambda::Real, n::Integer,
                         F, ws)
 
 end
+
+focal_length(A::LensOperator) = focal_length(A.lens)
+diameter(A::LensOperator) = diameter(A.lens)
+wavelength(A::LensOperator) = A.lambda
+input_region(A::LensOperator) = A.Rinp
+output_region(A::LensOperator) = A.Rout
 
 function fftfreq(_dim::Integer)
     dim = Int(_dim)
@@ -215,6 +232,31 @@ function computeshiftphasors(inp_off::NTuple{2,Real},
     return computeshiftphasors(convert(NTuple{2,Float64}, inp_off),
                                convert(NTuple{2,Float64}, out_off),
                                convert(Int, n))
+end
+
+function LazyAlgebra.vcreate(::Type{Direct}, A::LensOperator,
+                             x::ComplexAmplitude)
+    return ComplexAmplitude(A.Rout, A.lambda)
+end
+
+function LazyAlgebra.apply!(alpha::Real, ::Type{Direct}, A::LensOperator,
+                            x::ComplexAmplitude,
+                            beta::Real,
+                            y::ComplexAmplitude)
+    if wavelength(x) != wavelength(A)
+        error("source wavelength does not match")
+    end
+    if wavelength(y) != wavelength(A)
+        error("destination wavelength does not match")
+    end
+    if region(x) != input_region(A)
+        error("source region does not match")
+    end
+    if region(y) != output_region(A)
+        error("destination region does not match")
+    end
+    apply!(alpha, Direct, A, x.amp, beta, y.amp)
+    return y
 end
 
 function LazyAlgebra.vcreate(::Type{Direct}, A::LensOperator,

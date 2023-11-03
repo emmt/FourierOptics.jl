@@ -23,7 +23,7 @@
 
 \DeclareUnicodeCharacter{2264}{\le} % ≤
 \DeclareUnicodeCharacter{2265}{\ge} % ≥
-\DeclareUnicodeCharacter{22C5}{\!\cdot\!}
+\DeclareUnicodeCharacter{22C5}{\cdot}
 
 %\newcommand*{\DeleteColor}{\color{orange}}
 %\newcommand*{\NewColor}{\color{teal}}
@@ -160,6 +160,8 @@
 \DeclareMathOperator{\rnd}{rnd}
 \DeclareMathOperator{\sign}{sign}
 \DeclareMathOperator{\sinc}{sinc}
+\DeclareMathOperator{\sinint}{Si}
+\DeclareMathOperator{\cosint}{Ci}
 \DeclareMathOperator{\Card}{Card}
 \DeclareMathOperator{\Conv}{conv}
 %\DeclareMathOperator{\Det}{Det}
@@ -267,6 +269,14 @@
   \def\mathrlapinternal#1#2{\rlap{$\mathsurround=0pt#1{#2}$}}
   \def\mathclapinternal#1#2{\clap{$\mathsurround=0pt#1{#2}$}}
 
+%----------------------------------------------------------------------- UNITS -
+
+\RequirePackage[squaren,Gray]{SIunits}
+\newcommand{\micron}{\ensuremath{\micro\mathrm{m}}} % requires SIunits
+%\newcommand{\micron}{\text{\textmu{}m}} % requires textcomp
+%\newcommand{\micron}{\ensuremath{\muup\mathrm{m}}} % requires txfonts
+%\newcommand{\micron}{\ensuremath{\upmu\mathrm{m}}} % requires upgreek
+
 %----------------------------------------------------------- SIMPLE ALGORITHMS -
 
 \usepackage{array}
@@ -287,28 +297,49 @@
 Abstract...
 \end{abstract}
 
+\section{Analytic Model}
+
+The diffraction pattern by a circular (possibly with an obstruction), a
+rectangular or an hexagonal perfect pupil has a closed (analytical) form. 
+Accounting for the pixel integration amounts to convolving the analytical
+PSF with the \emph{pixel shape}.  If the pixel grid is aligned with the
+pupil sides, a closed form expression can be computed for a rectangular
+pupil with rectangular pixels.
+
+The complex amplitude diffracted by a square pupil of size $a \times a$ is given by:
+\begin{equation}
+  h(\V s) = \Paren*{\frac{\sin\Paren*{q}}{q}}^{\!\!2}
+\end{equation}
+
 
 \section{Numerical Simulation}
 
+\subsection{Perfect lens}
+
 Propagation of the complex amplitude between the pupil plane and the focal
-plane of a (perfect) lens amounts to computing:
+plane of a (perfect) lens is done by:
 \begin{align}
-  \FT{A}(\V s) = \iint A(\V r) \, \mathe^{
-    \frac{-2\,\mathi\,\pi}{\lambda\,f}\,\Inner{\V r}{\V s}
+  \FT{a}(\V s) = \frac{1}{\lambda\,f} \, \iint p(\V r - \V c) \, a(\V r) \, \mathe^{
+    \frac{-2\,\mathi\,\pi}{\lambda\,f}\,\Inner{\V r - \V c}{\V s - \V c}
   } \, \mathd^2\V r \, ,
   \label{eq:lens-transform}
 \end{align}
-which involves a continuous Fourier transform and where $\lambda$ and $f$
-are the wavelength and the focal length while $\V r$ and $\V s$ are the
-positions in the pupil and focal plane respectively.  \oops{[A
-normalization term is missing.]}
+where $\FT{a}(\V s)$ is the complex amplitude at the position $\V s$ of the
+focal plane, $\FT{a}(\V r)$ is the complex amplitude at the position $\V r$
+of the pupil plane, $p(\V r)$ is the complex amplitude transmission of the
+pupil (relative to the center of the lens), $\V c$ is the position of the
+center of the lens in the pupil plane, $\lambda$ is the wavelength and $f$
+is the focal length. Equation~(\ref{eq:lens-transform}) involves a
+continuous Fourier transform which we want to compute quickly by means of a
+fast Fourier transform (FFT).
 
-When the model is discretized, the complex amplitudes $A(\V r)$ and
-$\FT{A}(\V s)$ are sampled at evenly spaced positions.  For instance:
+When the model is discretized, the complex amplitudes $a(\V r)$ and
+$\FT{a}(\V s)$ are sampled at evenly spaced positions.  For instance:
 \begin{subequations}
 \begin{align}
-  A_{\V j} &\approx A(\V r_{\V j}) \,, \\
-  \FT{A}_{\V k} &\approx \FT{A}(\V s_{\V k}) \,,
+  a_{\V j} &\approx a(\V r_{\V j}) \,, \\
+  p_{\V j} &\approx p(\V r_{\V j} - \V c) \,, \\
+  \FT{a}_{\V k} &\approx \FT{a}(\V s_{\V k}) \,,
 \end{align}
 \end{subequations}
 with $\V j \in \Omega$ and $\V k \in \Omega$ the 2D indices of the
@@ -346,13 +377,14 @@ where the inner product on $\Omega$ is defined by:
 \end{equation}
 where the sum is taken over the number of dimensions ($2$ for us).
 
-Approximating the integral in Eq.~(\ref{eq:lens-transform}) by a Riemann sum yields:
+Approximating the integral in Eq.~(\ref{eq:lens-transform}) by a Riemann
+sum yields:
 \begin{equation}
-  \FT{A}_{\V k} \approx \sum_{\V j \in \Omega} A_{\V j} \, \mathe^{\frac{-2\,\mathi\,\pi}{\lambda\,f}\,\Inner{\V r_{\V j}}{\V s_{\V k}}} \,
-  \Delta r^2 \, .
+  \FT{a}_{\V k} \approx \frac{\Delta r^2}{\lambda\,f} \,
+  \sum_{\V j \in \Omega} p_{\V j} \, a_{\V j} \,
+  \mathe^{\frac{-2\,\mathi\,\pi}{\lambda\,f}\,\Inner{\V r_{\V j}}{\V s_{\V k}}} \, .
   \label{eq:Riemann-approx}
 \end{equation}
-\oops{[There is also the missing normalization factor to take into account here.]}
 In order to make this looks like a DFT, the following relation must hold:
 \begin{displaymath}
   \Inner{\V j - \V j_0}{\V k - \V k_0}_{\Omega}
@@ -368,24 +400,28 @@ quantities $\Delta r$, $\Delta s$, $\lambda$ and $f$ are all lengths.
 Assuming the relation in Eq.~(\ref{eq:dimensioning}) holds, the complex
 amplitude in the focal plane is approximately given by:
 \begin{align}
-  \FT{A}_{\V k}
-  &\approx \sum_{\V j \in \Omega} A_{\V j} \,
+  \FT{a}_{\V k}
+  &\approx \frac{\Delta r^2}{\lambda\,f} \, \sum_{\V j \in \Omega}
+  p_{\V j} \, a_{\V j} \,
   \mathe^{-2\,\mathi\,\pi \, \Inner{\V j - \V j_0}{\V k - \V k_0}_{\Omega}} \,
-  \Delta r^2 \notag\\
-  &= \Delta r^2 \,
+  \notag\\
+  &= \frac{\Delta r^2}{\lambda\,f} \,
   \mathe^{+2\,\mathi\,\pi \, \Inner{\V j_0}{\V k - \V k_0}_{\Omega}} \,
   \sum_{\V j \in \Omega}
-  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \, A_{\V j} \, \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}} \, ,  
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \,
+  p_{\V j} \, a_{\V j} \,
+  \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}} \, ,  
 \end{align}
 where the sum in the last right hand side is the DFT of:
 \begin{displaymath}
-  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \, A_{\V j} \, .
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \, p_{\V j} \,
+  a_{\V j} \, .
 \end{displaymath}
 If the offsets $\V j_0$ and $\V k_0$ have integer coordinates, another way
 to write this is:
 \begin{equation}
-  \FT{A}_{\V k + \V k_0} \approx \Delta r^2 \sum_{\V j \in \Omega}
-  A_{\V j + \V j_0} \,
+  \FT{a}_{\V k + \V k_0} \approx \frac{\Delta r^2}{\lambda\,f} \,
+  \sum_{\V j \in \Omega} p_{\V j + \V j_0} \, a_{\V j + \V j_0} \,
   \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}} \, ,
 \end{equation}
 where circular shift is used for translating the sampled arrays.  If the
@@ -393,18 +429,184 @@ where circular shift is used for translating the sampled arrays.  If the
 then the offsets $\V j_0$ and $\V k_0$ have integer coordinates and the
 equation becomes:
 \begin{align}
-  \FT{A}_{\V k} &\approx \Delta r^2 \,
+  \FT{a}_{\V k} &\approx \frac{\Delta r^2}{\lambda\,f} \, 
   \mathtt{fftshift}\Paren*{
     \sum_{\V j \in \Omega}
-    \mathtt{ifftshift}\Paren*{\V A}_{\V j} \,
+    \mathtt{ifftshift}\Paren*{\Diag(\V p) ⋅ \V a}_{\V j} \,
   \mathe^{-2\,\mathi\,\pi \, \Inner{\V j}{\V k}_{\Omega}}
   }_{\V k} \\
-  &= \Delta r^2 \,\mathtt{fftshift}\Paren*{\mathtt{fft}\Paren*{
-    \mathtt{ifftshift}\Paren*{\V A}
-  }}_{\V k} \, ,
+  &= \frac{\Delta r^2}{\lambda\,f} \,
+    \mathtt{fftshift}\Paren*{
+      \mathtt{fft}\Paren*{
+        \mathtt{ifftshift}\Paren*{\Diag(\V p) ⋅\V a}
+      }
+    }_{\V k} \, ,
 \end{align}
-where $\V A$ denotes the array of sampled values of the complex amplitude
+where $\V a$ denotes the array of sampled values of the complex amplitude
 in the pupil plane.
+
+\subsection{Simulating a tip-tilt}
+
+The tip-tilt $\V\theta = \delta\V s/f$ (with $\delta\V s$ the displacement
+of the image in the focal plane) yields a phase shift $\phi(\V r)$ such that:
+\begin{displaymath}
+  \phi(\V r) - \frac{2\,\pi}{\lambda\,f}\,\Inner{\V r}{\V s}
+  = -\frac{2\,\pi}{\lambda\,f}\,\Inner{\V r}{\V s - \delta\V s} \, .
+\end{displaymath}
+Hence $\phi(\V r)$ is given by:
+\begin{equation}
+  \phi(\V r) = \frac{2\,\pi}{\lambda\,f}\,\Inner{\V r}{\delta\V s}
+  = \Inner{\V u}{\V r} \, ,
+\end{equation}
+with:
+\begin{equation}
+  \V u = \frac{2\,\pi\,\delta\V s}{\lambda\,f} = \frac{2\,\pi\,\V\theta}{\lambda}\,.
+\end{equation}
+
+\subsection{Potential issues}
+
+\paragraph{Pupil plane aliasing.}  To avoid aliasing when computing
+intensities, the size $D$ of the pupil should not be larger than $N\,\Delta
+r/2$.
+
+\paragraph{Vignetting.}  To avoid vignetting, the input region must encompass the
+the pupil.
+
+\paragraph{Focal plane periodisation.}  To avoid this issue, the considered
+output field must not be too far from the direction of propagation
+approximately defined by the tip-tilt of the wavefront just after the
+pupil.
+
+
+\subsection{Lazy Algebra Implementation}
+
+Using linear algebra notation, the effect of a lens can be represented by a
+linear operator $\M L$.  Equation~(\ref{eq:lens-transform}) becomes:
+\begin{equation}
+  \DFT{\V a} = \M L⋅\V a \, ,
+\end{equation}
+with:
+\begin{equation}
+  \M L = \Diag\Paren[big]{\V q^\Tag{out}}⋅\M F⋅\Diag\Paren[big]{\V q^\Tag{inp}} \, ,
+\end{equation}
+where $\M F$ is the FFT operator (of appropriate size) and:
+\begin{align}
+  q^\Tag{inp}_{\V j} &= \frac{\Delta r^2}{\lambda\,f} \, p_{\V j} \,
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j}{\V k_0}_{\Omega}} \, , \\
+  q^\Tag{out}_{\V k} &= 
+  \mathe^{+2\,\mathi\,\pi \, \Inner{\V j_0}{\V k - \V k_0}_{\Omega}} \, .
+\end{align}
+The parameters to define $\M L$ are: $\V p$ the sampled pupil transmission,
+$N$ the size of the FFT, $\lambda$ the wavelength, $f$ the focal length,
+$\Delta r$ and $\Delta s$ the sampling steps in the pupil and focal plane,
+the offsets $\V j_0$ and $\V k_0$ of the origin in these two planes.  These parameters are related by the relation in Eq.~(\ref{eq:dimensioning}).
+
+Example, the wavefront sensor of Themis AO system has pixel of size $\Delta s = 7\micron$, the focal length of the microlenses is $f = 14.57\,\mathrm{mm}$ and their diameter is $D = 300\,\micron$.  At $\lambda = 500\,\mathrm{nm}$,  Eq.~(\ref{eq:dimensioning}) yields:
+\begin{displaymath}
+    \Delta r = \frac{\lambda\,f}{N\,\Delta s} \approx \frac{1.04\,\mathrm{mm}}{N} \, .
+\end{displaymath}
+The number of samples across the pupil is given by:
+\begin{displaymath}
+    \frac{D}{\Delta r} = \frac{N\,D\,\Delta s}{\lambda\,f} \approx 0.288\,N \, .
+\end{displaymath}
+which is smaller than $N/2$ and thus there is no aliasing without the needs
+to subsample the output pixels.  We must choose $N ≥ 14$ to have at least 4
+pixels per pupil.  Since the output image is about $36\times36$\,pixels,
+taking $N=64$ is sufficient to satisfy all constraints.
+
+A complex amplitude means nothing without units and necessary parameters to figure out the physical position of a given sample. 
+
+\appendix
+\section{Cardinal Sine}
+
+The transmission of a (mono-dimensional) rectangular pupil $p(r)$ of width
+$a$ is proportional to $g_{a}(r)$ the normalized and centered rectangular
+gate function of width $a$ defined by:
+\begin{equation}
+   g_{a}(r) = \frac{1}{a} \times \begin{cases}
+   1   & \text{if $\Abs{r} < a/2$;}\\
+   1/2 & \text{if $\Abs{r} = a/2$;}\\
+    0  & \text{if $\Abs{r} > a/2$;}\\
+   \end{cases}
+   \label{eq:gate-function}
+\end{equation}
+and whose Fourier transform is:
+\begin{align}
+  \FT{g}_a(u)
+  &= \int g_a(r)\,\mathe^{-\mathi\,2\,\pi\,r\,u}\,\mathd r
+  = \frac{1}{a} \, \int_{-a/2}^{a/2} \mathe^{-2\,\pi\,\mathi\,r\,u}\,\mathd r
+  \notag\\
+  &= \frac{\sin\Paren{\pi\,a\,u}}{\pi\,a\,u} \\
+  &= \sinc\Paren{a\,u}
+\end{align}
+where $\sinc$ is the \emph{cardinal sine function} defined by:
+\begin{equation}
+   \sinc(x) \bydef \begin{cases}
+   1   & \text{if $x = 0$;}\\[1ex]
+   \displaystyle \frac{\sin\Paren{\pi\,x}}{\pi\,x}
+   & \text{if $x \not= 0$.}
+   \end{cases}
+   \label{eq:sinc-function}
+\end{equation}
+
+The PSF $h_\Tag{foc}(s)$ is proportional to a squared cardinal sine:
+\begin{equation}
+  \label{eq:psf-foc}
+  h_\Tag{foc}(s) \propto \sinc^2\Paren*{\rho_\Tag{foc}\,s}
+  \quad\text{with}\quad
+  \rho_\Tag{foc} = \frac{a}{\lambda\,f} \, ,
+\end{equation}
+assuming $s$ is the position in the focal plane, $f$ is the focal length
+and $\lambda$ is the wavelength.  Alternately, considering $\theta = s/f$
+the angular direction of the light, the angular PSF writes:
+\begin{equation}
+  \label{eq:psf-ang}
+  h_\Tag{ang}(\theta) \propto \sinc^2\Paren*{\rho_\Tag{ang}\,\theta}
+  \quad\text{with}\quad
+  \rho_\Tag{ang} = a/\lambda \, .
+\end{equation}
+As a general case, we consider that the PSF writes:
+\begin{equation}
+  h(x) \propto \sinc^2\Paren*{\rho\,x} \, ,
+  \label{eq:psf-general}
+\end{equation}
+for some positional coordinate $x$ and with $\rho \propto a$ given by
+Eq.~(\ref{eq:psf-foc}) or Eq.~(\ref{eq:psf-ang}).
+
+To compute the normalization factor or to integrate the PSF in a pixel, a
+primitive $G(x)$ of the squared cardinal sine is needed.  This primitive
+has a closed form:
+\begin{equation}
+   G(x) \bydef \int_0^x \sinc^2(t) \, \mathd t
+   = \frac{\sinint\Paren*{2\,\pi\,x}}{\pi} - x\,\sinc^2(x)\, .
+\end{equation}
+where $\sinint$ is the so called \emph{sine integral function} defined as:
+\begin{equation}
+  \sinint(x) \bydef \int_0^x \frac{\sin t}{t} \, \mathd t \,,
+  \label{eq:sinint}
+\end{equation}
+which is defined for all $x \in \Reals$.  The limits of the sine integral
+function are:
+\begin{equation}
+  \lim_{x\rightarrow\pm\infty}\sinint(x) = \pi/2 \, .
+\end{equation}
+The squared cardinal sine function is therefore normalized:
+\begin{equation}
+  \int_{-\infty}^{+\infty} \sinc^2(t)\,\mathd t = 1 \,.
+\end{equation}
+
+To have a normalized PSF, we must write the PSF as:
+\begin{equation}
+  \boxed{
+    h(x) = \rho\,\sinc^2\Paren{\rho\,x} \, .
+  }
+  \label{eq:slit-psf}
+\end{equation}
+A primitive of this PSF is:
+\begin{align}
+   H(x) &\bydef \int_0^x h(t) \, \mathd t \\
+   &= \frac{\sinint\Paren*{2\,\pi\,\rho\,x}}{\pi} - \rho\,x\,\sinc^2(\rho\,x)\, .
+\end{align}
 
 % References
 \footnotesize

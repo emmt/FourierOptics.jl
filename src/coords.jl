@@ -84,6 +84,9 @@ struct CoordinateTransform
     y0::Float64   # ordinate at (u,v=0)
 end
 
+Base.:(==)(A::CoordinateTransform, B::CoordinateTransform) =
+    (A.stp == B.stp && A.x0 == B.x0 && A.y0 == B.y0)
+
 # Yields the identity without arguments.
 CoordinateTransform() = CoordinateTransform(1, 0, 0)
 
