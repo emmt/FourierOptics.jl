@@ -10,6 +10,7 @@ export
     PolygonalAperture, PolygonalObscuration,
     propagate, propagate!,
     forge_mask, forge_mask!,
+    pupil,
 
     # Exports from Unitful.
     Length,
@@ -39,6 +40,7 @@ include("fields.jl")
 include("propagate.jl")
 include("winding.jl")
 include("masks.jl")
+include("pupils.jl")
 include("lenses.jl")
 
 end
