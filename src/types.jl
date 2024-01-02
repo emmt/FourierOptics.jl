@@ -189,3 +189,150 @@ struct Frequencies{I<:AbstractUnitRange{Int}} <: AbstractCoordinates{Int}
         return new{I}(indices, half)
     end
 end
+
+# Overlapping of a grid cell with a shape.
+@enum Overlap::UInt32 begin
+    OUTSIDE
+    PARTIAL
+    INSIDE
+end
+
+"""
+    FourierOptics.GeometricalObject{T}
+
+is the super-type of geometrical objects whose coordinates are of type `T` and
+used to specify bounding-boxes, positions, and boundaries of optical masks.
+
+FIXME: `T` must be floating point.
+
+"""
+abstract type GeometricalObject{T} end
+
+"""
+    FourierOptics.ShapeObject{T}
+
+is the super-type of shape objects whose coordinates are of type `T` and which
+can be used to specify boundaries.
+
+"""
+abstract type ShapeObject{T} <: GeometricalObject{T} end
+
+"""
+    FourierOptics.MaskObject{T}
+
+is the super-type of transparent (i.e., apertures) or opaque (i.e.,
+obscurations) geometrical objects whose coordinates are of type `T` and used to
+forge optical masks.
+
+"""
+abstract type MaskObject{T,S<:ShapeObject{T}} <: ShapeObject{T} end
+
+# An opaque mask represents an obscuration.
+struct OpaqueMask{T,S} <: MaskObject{T,S}
+    shape::S
+    OpaqueMask(obj::S) where {T,S<:ShapeObject{T}} = new{T,S}(obj)
+end
+
+# A transparent mask represents an aperture.
+struct TransparentMask{T,S} <: MaskObject{T,S}
+    shape::S
+    TransparentMask(obj::S) where {T,S<:ShapeObject{T}} = new{T,S}(obj)
+end
+
+struct Point{T} <: GeometricalObject{T}
+    x::T
+    y::T
+    Point{T}(x, y) where {T} = new{T}(x, y)
+end
+
+const Points{T} = Union{AbstractVector{Point{T}},Tuple{Vararg{Point{T}}}}
+
+struct Box{T} <: GeometricalObject{T}
+    xmin::T
+    ymin::T
+    xmax::T
+    ymax::T
+    Box{T}(ll::Point,ur::Point) where {T} = new{T}(ll.x, ll.y, ur.x, ur.y)
+end
+
+struct Rectangle{T} <: ShapeObject{T}
+    x0::T
+    y0::T
+    x1::T
+    y1::T
+    function Rectangle{T}(p0::Point,p1::Point) where {T}
+        # The coordinates are ordered so that `first` and `last` directly yield
+        # `(x0,y0)` and `(x1,y1)`.
+        x0, x1 = fastminmax(as(T, p0.x), as(T, p1.x))
+        y0, y1 = fastminmax(as(T, p0.y), as(T, p1.y))
+        return new{T}(x0, y0, x1, y1)
+    end
+end
+
+struct Circle{T} <: ShapeObject{T}
+    x::T
+    y::T
+    r::T
+    Circle{T}(center::Point, radius) where {T} =
+        new{T}(center.x, center.y, fastmax(zero(radius), radius))
+end
+
+struct Polygon{T,N} <: ShapeObject{T}
+    vertices::NTuple{N,Point{T}}
+    box::Box{T} # bounding-box
+    direct::Bool # direct orientation?
+    convex::Bool # polygon is convex?
+    function Polygon{T}(vertices::NTuple{N,Point{T}}) where {T,N}
+        isconcretetype(T) || throw(ArgumentError("coordinate type must be concrete"))
+        N ≥ 3 || throw(ArgumentError("polygon must have at least 3 vertices"))
+        xmin = ymin = typemax(T)
+        xmax = ymax = typemin(T)
+        orient = 0
+        direct = true
+        convex = true
+        @inbounds for i in 1:N
+            # Compute cross-product to determine whether the polygon is convex
+            # and its global direction (to guess where is interior). Determine
+            # bounding-box.
+            i_prev = ifelse(i > 1, i - 1, N)
+            i_next = ifelse(i < N, i + 1, 1)
+            s = outer(vertices[i] - vertices[i_prev],
+                      vertices[i_next] - vertices[i])
+            if iszero(s)
+                throw(ArgumentError("polygon vertices and egdes must be distinct"))
+            end
+            this_orient = (s > zero(s) ? +1 : -1)
+            if orient == 0
+                orient = this_orient
+            elseif orient != this_orient
+                convex = false
+            end
+            x, y = vertices[i]
+            if x < xmin
+                # Set whether polygon is in direct trigonometric
+                # (anti-clockwise) order according to the sign of the outer
+                # product of the two edges at this extremum vertex.
+                xmin = x
+                direct = this_orient > 0
+            end
+            xmax = fastmax(xmax, x)
+            ymin = fastmin(ymin, y)
+            ymax = fastmax(ymax, y)
+        end
+        return new{T,N}(vertices, Box((xmin,ymin),(xmax,ymax)), direct, convex)
+    end
+end
+
+for (parent, child) in ((:Rectangle, :Rectangular),
+                        (:Circle,    :Circular),
+                        (:Polygon,   :Polygonal),)
+    @eval begin
+        const $(Symbol(child,"Mask")){T} = MaskObject{T,<:$parent{T}}
+        const $(Symbol(child,"Aperture")){T} = TransparentMask{T,<:$parent{T}}
+        const $(Symbol(child,"Obscuration")){T} = OpaqueMask{T,<:$parent{T}}
+    end
+end
+
+const RectangularObject{T} = Union{Box{T},Rectangle{T},RectangularMask{T}}
+const CircularObject{T} = Union{Circle{T},CircularMask{T}}
+const PolygonalObject{T} = Union{Polygon{T},PolygonalMask{T}}

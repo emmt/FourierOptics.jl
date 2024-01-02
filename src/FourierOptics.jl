@@ -4,8 +4,12 @@ export
     # Exports from this package.
     Angle,
     Field,
-    propagate,
-    propagate!,
+    Coordinates, RolledCoordinates,
+    RectangularAperture, RectangularObscuration,
+    CircularAperture, CircularObscuration,
+    PolygonalAperture, PolygonalObscuration,
+    propagate, propagate!,
+    forge_mask, forge_mask!,
 
     # Exports from Unitful.
     Length,
@@ -24,10 +28,14 @@ import AbstractFFTs: Plan, fftshift, ifftshift
 using TypeUtils
 using LinearAlgebra
 
+using Base: axes1, Fix1, Fix2
+
 include("types.jl")
 include("utils.jl")
 include("fields.jl")
 include("propagate.jl")
+include("winding.jl")
+include("masks.jl")
 include("lenses.jl")
 
 end
