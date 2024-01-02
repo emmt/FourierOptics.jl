@@ -5,10 +5,12 @@ version = "0.1.0"
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
+ArrayTools = "1dc0ca97-c5ce-4e77-ac6d-c576ac9d7f27"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 TypeUtils = "c3b1956e-8857-4d84-9b79-890df85b1e67"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+Unitless = "c904d999-9673-4878-a3dd-e3ef1851788a"
 
 [compat]
 julia = "1"

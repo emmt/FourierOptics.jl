@@ -25,8 +25,11 @@ using Unitful:
 using AbstractFFTs, FFTW
 import AbstractFFTs: Plan, fftshift, ifftshift
 
-using TypeUtils
+using ArrayTools, TypeUtils, Unitless
 using LinearAlgebra
+
+import Unitless: floating_point_type
+import TypeUtils: as_eltype, convert_eltype
 
 using Base: axes1, Fix1, Fix2
 
