@@ -122,7 +122,7 @@ interpolate(a, b, f) = (oneunit(f) - f)*a + f*b
 """
     FourierOptics.exp_i(ϕ) -> exp(i⋅ϕ)
 
-yields `exp(i⋅ϕ)` computed efficiently. if Phase `ϕ` is not an angular
+yields `exp(i⋅ϕ)` computed efficiently. If phase `ϕ` is not an angular
 quantity, it must be a real or a dimensionless quantity assumed to be in
 radians.
 
