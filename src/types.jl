@@ -12,15 +12,48 @@ const Float = Float64
 is the union of quantities suitable to specifiy an angle.
 
 """
-const Angle = Union{typeof(°),typeof(rad)}
+const Angle = Unitful.Quantity{<:Real,Unitful.NoDims,<:Union{typeof(°),typeof(rad)}}
 
 """
-    FourierOptics.Meters{F}
+    FourierOptics.ReciprocalLength
 
-is the type of a length expressed in meters and with floating-point type `F`.
+is the union of quantities suitable to specifiy a reciprocal length.
 
 """
-const Meters{F<:AbstractFloat} = Unitful.Quantity{F, Unitful.𝐋, Unitful.FreeUnits{(Unitful.Unit{:Meter,Unitful.𝐋}(0, 1//1),), Unitful.𝐋, nothing}}
+const ReciprocalLength = Union{
+    Unitful.Quantity{T, Unitful.𝐋^-1, U},
+    Unitful.Level{L, S, Unitful.Quantity{T, Unitful.𝐋^-1, U}} where {L, S}} where {T, U}
+
+"""
+    FourierOptics.StdLength{F}
+
+is the type of a length expressed in standard units (meters) and with
+floating-point type `F`.
+
+"""
+const StdLength{F<:AbstractFloat} = Unitful.Quantity{
+    F, Unitful.𝐋,
+    Unitful.FreeUnits{(Unitful.Unit{:Meter,Unitful.𝐋}(0, 1//1),), Unitful.𝐋, nothing}}
+
+"""
+    FourierOptics.StdReciprocalLength{F}
+
+is the type of a reciprocal length expressed in standard units (1/meters) and
+with floating-point type `F`.
+
+"""
+const StdReciprocalLength{F<:AbstractFloat} = Unitful.Quantity{
+    F, Unitful.𝐋^-1,
+    Unitful.FreeUnits{(Unitful.Unit{:Meter,Unitful.𝐋}(0, -1//1),), Unitful.𝐋^-1, nothing}}
+
+"""
+    FourierOptics.StdAngle{F}
+
+is the type of an angle expressed in standard units (radians) and with
+floating-point type `F`.
+
+"""
+const StdAngle{F<:AbstractFloat} = Unitful.Quantity{F, Unitful.NoDims, typeof(rad)}
 
 """
     FourierOptics.Dimensionless{Real}

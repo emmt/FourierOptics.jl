@@ -128,23 +128,48 @@ floating_point_type(A::Field) = floating_point_type(typeof(A))
 floating_point_type(::Type{<:Field{T}}) where {T} = T
 
 """
-    FourierOptics.standard_length([T = Float64,] x::Length)
+    FourierOptics.standardize(T, val)
+    FourierOptics.standardize(obj, val)
+
+yield value `val` with standard units and floating-point type `T`. First
+argument may also be an object `obj` (e.g., a field) or a type of such an
+object to use the floating-point type suitable for this object.
+
+"""
+standardize(obj::AbstractArray, val) = standardize(typeof(obj), val)
+standardize(::Type{<:Field{T}}, val) where {T} = standardize(T, val)
+standardize(::Type{<:AbstractArray{T}}, x) where {T} =
+    standardize(floating_point_type(T), val)
+
+standardize(::Type{T}, val::Real) where {T<:AbstractFloat} = as(T, val)
+standardize(::Type{T}, val::Complex) where {T<:AbstractFloat} = as(Complex{T}, val)
+standardize(::Type{T}, val::Angle) where {T<:AbstractFloat} = as(StdAngle{T}, val)
+standardize(::Type{T}, val::Length) where {T<:AbstractFloat} = as(StdLength{T}, val)
+standardize(::Type{T}, val::ReciprocalLength) where {T<:AbstractFloat} =
+    as(StdReciprocalLength{T}, val)
+
+# catch errors
+@noinline standardize(::Type{T}, x::X) where {T,X} =
+    error("don't know how to standardize value of type `$X` to use with elements of type `$T`")
+
+"""
+    FourierOptics.standard_length([T = floating_point_type(x),] x::Length)
 
 yields a unitless floating-point value of type `T` corresponding to the length
 `x` in meters.
 
 """
-standard_length(x::Length) = standard_length(Float64, x)
+standard_length(x::Length) = standard_length(floating_point_type(x), x)
 standard_length(::Type{T}, x::Length) where {T<:AbstractFloat} = ustrip(T, m, x)
 
 """
-    FourierOptics.standard_angle([T = Float64,] x::Angle)
+    FourierOptics.standard_angle([T = floating_point_type(x),] x::Angle)
 
 yields a unitless floating-point value of type `T` corresponding to the angle
 `x` in radians.
 
 """
-standard_angle(x::Angle) = standard_angle(Float64, x)
+standard_angle(x::Angle) = standard_angle(floating_point_type(x), x)
 standard_angle(::Type{T}, x::Angle) where {T<:AbstractFloat} = ustrip(T, rad, x)
 
 """
