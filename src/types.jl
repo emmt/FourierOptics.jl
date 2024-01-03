@@ -1,3 +1,6 @@
+const ArrayAxis = Union{Integer,AbstractUnitRange{<:Integer}}
+const ArrayAxes{N} = NTuple{N,ArrayAxis}
+
 """
     FourierOptics.Float
 
@@ -70,82 +73,41 @@ const Dimensionless{T} = Union{T,Unitful.Quantity{<:T,Unitful.NoDims}}
 # Default settings.
 const default_fftw_flags = FFTW.MEASURE
 const default_fftw_timelimit = FFTW.NO_TIMELIMIT
-const default_Rayleigh_factor = 1
-const default_phase_offset = false
-const default_verbosity = 0
 
-"""
-    FourierOptics.Field(ampl; wavelength, grid_step, kwds...)
-
-builds a new field with complex amplitude stored in array `ampl`. The
-wavelength and grid sampling step size must be specified by the keywords
-`wavelength` and `grid_step`.
-
-Other optional keywords are:
-
-- `fftw_flags`, and `fftw_timelimit` the flags and time-limit for creating
-  the plans for FFTW.
-
-- `Rayleigh_factor` is a factor for adjusting the Rayleigh distance to
-  determine the boundary of the near and far fields. By default,
-  `Rayleigh_factor = $default_Rayleigh_factor`.
-
-- `phase_offset` specifies whether to propagate the global phase offset of the
-  field. This may be important when modeling the separate arms of an
-  interferometer with a path difference between the two. By default,
-  `phase_offset = $default_phase_offset`.
-
-- `verbosity` speicifies the level of verbosity. By default, `verbosity =
-  $default_verbosity`.
-
-"""
 mutable struct Field{T<:AbstractFloat,               # floating-point type
                      A<:AbstractMatrix{Complex{T}},  # complex amplitude
                      L,                              # linear index style?
                      F<:Plan,                        # forward FFT plan
                      B<:Plan,                        # backward FFT plan
                      } <: AbstractMatrix{Complex{T}}
-    ampl::A               # complex amplitude
-    forward_plan::F       # forward FFT plan
-    backward_plan::B      # backward FFT plan
-    Rayleigh_factor::T    # factor to determine the boundary of the near and far fields
-    lambda::Meters{T}     # wavelength
-    dx::Meters{T}         # sampling per pixel
-    w0::Meters{T}         # minimal radius of beam waist
-    z::Meters{T}          # position along propagation axis of surface
-    z_w0::Meters{T}       # position along propagation axis of minimal beam waist
-    surface_type::Symbol  # type of reference surface: `:PLANAR` or `:SPHERICAL`
-    verbosity::Int        # verbosity level
-    phase_offset::Bool    # propagate global phase offset?
+    ampl::A                      # complex amplitude, not accounting for scalar and quadratic phase factors
+    forward_plan::F              # forward FFT plan
+    backward_plan::B             # backward FFT plan
+    n::T                         # refractive index
+    λ₀::StdLength{T}             # wavelength in vacuum
+    δx::StdLength{T}             # sampling step in transverse plane
+    z::StdLength{T}              # position along propagation axis of transverse plane
+    curv::StdReciprocalLength{T} # curvature of the quadratic phase factor
+    fact::Complex{T}             # uniform scalar factor
 
     # Inner constructor.
     function Field(ampl::A,
                    forward_plan::F,
                    backward_plan::B;
+                   refractive_index::Real = 1.0,
                    wavelength::Length,
-                   grid_step::Length,
-                   verbosity::Integer = 0,
-                   Rayleigh_factor::Real = default_Rayleigh_factor,
-                   phase_offset::Bool = default_phase_offset,
-                   _preserve_amplitude::Bool = false, # private option
+                   sampling::Length,
                    ) where {T<:AbstractFloat,
                             A<:AbstractMatrix{Complex{T}},
                             F<:Plan, B<:Plan}
         # Check arguments.
-        n = size(ampl, 1)
-        size(ampl, 2) == n || error("expecting a square complex amplitude array")
+        N = size(ampl, 1)
+        size(ampl, 2) == N || error("expecting a square complex amplitude array")
         Base.has_offset_axes(ampl) && error("complex amplitude array must have 1-based indices")
         eltype(forward_plan) == Complex{T} || error("incompatible element type for FFT forward plan")
         axes(forward_plan) == axes(ampl) || error("incompatible indices for FFT forward plan")
         eltype(backward_plan) == Complex{T} || error("incompatible element type for FFT backward plan")
         axes(backward_plan) == axes(ampl) || error("incompatible indices for FFT backward plan")
-
-        # Assume the beam diameter is one-half of the surface size, hence its
-        # radius is one-fourth of the surface size.
-        w0 = n*grid_step/4
-
-        # Fill amplitude with ones.
-        _preserve_amplitude || fill!(ampl, one(eltype(ampl)))
 
         # Create and instantiate structure.
         L = IndexStyle(ampl) === IndexLinear()
@@ -153,15 +115,12 @@ mutable struct Field{T<:AbstractFloat,               # floating-point type
         obj.ampl = ampl
         obj.forward_plan = forward_plan
         obj.backward_plan = backward_plan
-        obj.Rayleigh_factor = check_Rayleigh_factor(Rayleigh_factor)
-        obj.lambda = check_wavelength(wavelength)
-        obj.dx = check_grid_step(grid_step)
-        obj.w0 = w0
+        obj.n = check_refractive_index(refractive_index)
+        obj.λ₀ = check_wavelength(wavelength)
+        obj.δx = check_grid_step(sampling)
         obj.z = 0.0m
-        obj.z_w0 = 0.0m
-        obj.surface_type = :PLANAR
-        obj.verbosity = verbosity
-        obj.phase_offset = phase_offset
+        obj.fact = one(T)
+        obj.curv = 0.0u"m^-1" # assume a planar wavefront
         return obj
     end
 end

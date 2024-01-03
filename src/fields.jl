@@ -1,10 +1,40 @@
 # All allowed planning flags.
 const FFTW_PLANNING_FLAGS = (FFTW.ESTIMATE|FFTW.MEASURE|FFTW.PATIENT|FFTW.EXHAUSTIVE|FFTW.WISDOM_ONLY)
 
-# Outer constructors.
+"""
+    FourierOptics.Field(ampl; refractive_index=1, wavelength, sampling, kwds...)
+    FourierOptics.Field(copy(ampl); refractive_index=1, wavelength, sampling, kwds...)
+
+constructs a new field with complex amplitude stored in array `ampl`. This
+array is not modified by the constructor and is shared by the object (the
+caller can make a copy first to avoid this, as shown in the second example).
+Other parameters are specified by keywords (some are mandatory):
+`refractive_index` is the refractive index of the propagation medium,
+`wavelength` is the wavelength in the vacuum, and `sampling` is the lateral grid
+step.
+
+Other possible keywords in `kwds...` are `fftw_flags`, and `fftw_timelimit` the
+flags and time-limit for creating the plans for FFTW. If the caller has already
+created such plans, the constructor may be called as:
+
+    FourierOptics.Field(ampl, forward, backward; refractive_index=1, wavelength, sampling)
+
+with `forward` and `backward` the FTTW plans for performing the forward and
+backward FFT.
+
+---
+
+   FourierOptics.Field{T=Float64}(; refractive_index=1, wavelength, dim, sampling, fill=0, kwds...)
+
+constructs a new field with complex amplitude stored in an array whose elements
+have type `Complex{T}`. All parameters are specified by keywords (see above).
+Additional keywords are `dim` the number of samples along each dimension of a
+tranversal plane and `fill` the initial complex amplitude of the field.
+
+"""
 Field(; kwds...) = Field{Float64}(; kwds...)
-Field{T}(; grid_size::Integer, kwds...) where {T<:AbstractFloat} =
-    Field(Array{Complex{T}}(undef, grid_size, grid_size); kwds...)
+Field{T}(; fill=zero(Complex{T}), dim::Integer, kwds...) where {T<:AbstractFloat} =
+    Field(fill!(Array{Complex{T}}(undef, dim, dim), fill); kwds...)
 function Field(ampl::StridedMatrix{<:FFTW.fftwComplex};
                fftw_timelimit::Real = default_fftw_timelimit,
                fftw_flags::Integer = default_fftw_flags,
@@ -17,27 +47,361 @@ function Field(ampl::StridedMatrix{<:FFTW.fftwComplex};
     backward = plan_bfft!(ampl; flags, timelimit = fftw_timelimit)
 
     # Call inner constructor.
-    T = real(eltype(ampl))
-    A = typeof(ampl)
-    F = typeof(forward)
-    B = typeof(backward)
     return Field(ampl, forward, backward; kwds...)
 end
 
 # Copy constructor.
-function Base.copy(Fin::Field)
-    Fout = Field(copy(get_amplitude(Fin)), Fin.forward_plan, Fin.backward_plan;
-                 wavelength = get_wavelength(Fin),
-                 grid_step = get_grid_step(Fin),
-                 verbosity = get_verbosity(Fin),
-                 Rayleigh_factor = get_Rayleigh_factor(Fin),
-                 phase_offset = get_phase_offset(Fin),
-                 _preserve_amplitude = true)
-    copy_field!(Fout, Fin, :w0)
-    copy_field!(Fout, Fin, :z)
-    copy_field!(Fout, Fin, :z_w0)
-    copy_field!(Fout, Fin, :surface_type)
-    return Fout
+Base.copy(F::Field) = copyto!(similar(F), F)
+
+function Base.copyto!(dst::Field, src::Field)
+    @assert_same_axes dst src
+    copyto!(amplitude(dst), amplitude(src))
+    copy_struct_field!(dst, src, :n)
+    copy_struct_field!(dst, src, :λ₀)
+    copy_struct_field!(dst, src, :z)
+    copy_struct_field!(dst, src, :fact)
+    copy_struct_field!(dst, src, :curv)
+    return dst
+end
+
+Base.similar(F::Field, ::Type{T}, dims::Dims{2}) where {T} =
+    Field(similar(amplitude(F), T, dims),
+          F.forward_plan, F.backward_plan;
+          refractive_index = refractive_index(F),
+          wavelength = wavelength_in_vacuum(F),
+          sampling = grid_step(F))
+
+"""
+    FourierOptics.reset!(F::Field) -> F
+
+resets the complex amplitude of the field `F` and returns `F`.
+
+"""
+function reset!(F::Field)
+    ampl = amplitude(F)
+    fill!(ampl, one(eltype(ampl)))
+    F.curv = zero(F.curv)
+    F.fact = one(F.fact)
+    return F
+end
+
+# Implement the abstract array API for fields.
+Base.length(F::Field) = length(amplitude(F))
+Base.size(F::Field) = size(amplitude(F))
+Base.axes(F::Field) = axes(amplitude(F))
+Base.ndims(F::Field) = ndims(typeof(F))
+Base.ndims(::Type{<:Field{T,A}}) where {T,A} = ndims(A)
+Base.eltype(F::Field) = eltype(typeof(F))
+Base.eltype(::Type{<:Field{T,A}}) where {T,A} = eltype(A)
+Base.IndexStyle(::Type{<:Field{T,A,true}}) where {T,A} = IndexLinear()
+@inline function Base.getindex(F::Field{T,A,true}, i::Int) where {T,A}
+    @boundscheck checkbounds(F, i)
+    return @inbounds getindex(amplitude(F), i)
+end
+@inline function Base.setindex!(F::Field{T,A,true}, x, i::Int) where {T,A}
+    @boundscheck checkbounds(F, i)
+    @inbounds setindex!(amplitude(F), x, i)
+    return F
+end
+Base.IndexStyle(::Type{<:Field{T,A,false}}) where {T,A} = IndexCartesian()
+@inline function Base.getindex(F::Field{T,A,false}, I::Vararg{Int,2}) where {T,A}
+    @boundscheck checkbounds(F, I...)
+    return @inbounds getindex(amplitude(F), I...)
+end
+@inline function Base.setindex!(F::Field{T,A,false}, x, I::Vararg{Int,2}) where {T,A}
+    @boundscheck checkbounds(F, I...)
+    @inbounds setindex!(amplitude(F), x, I...)
+    return F
+end
+
+Base.show(io::IO, ::MIME"text/plain", F::Field) = show(io, F)
+function Base.show(io::IO, F::Field{T}) where {T}
+    n1, n2 = size(F)
+    print(io, n1, "×", n2, " Field{", T,
+          "}: n = ", round(refractive_index(F), sigdigits=4),
+          ", λ₀ = ", round(ustrip(nm, wavelength_in_vacuum(F)), sigdigits=6),
+          "nm,\n    δx = ", round(ustrip(mm, grid_step(F)), sigdigits=4),
+          "mm, z = ")
+    z = F.z
+    if abs(z) < 10m
+        print(io, round(ustrip(mm, z), sigdigits=8), "mm, R = ")
+    else
+        print(io, round(ustrip(m, z), sigdigits=8), "m, R = ")
+    end
+    R = inv(curvature(F))
+   if isinf(R)
+        print(io, "+∞")
+    else
+        print(io, round(ustrip(m, R), sigdigits=4))
+    end
+    print(io, " m, Iₜₒₜ = ", total_intensity(F))
+end
+
+"""
+    FourierOptics.curvature(F::Field) -> 1/R
+
+yields the wavefront curvature of the field `F`.
+
+"""
+curvature(F::Field) = F.curv
+
+"""
+    FourierOptics.multiplier(F::Field) -> 1/R
+
+yields the uniform factor for the field `F`.
+
+"""
+multiplier(F::Field) = F.fact
+
+"""
+    FourierOptics.amplitude(F::Field) -> amp
+
+yields the complex amplitude of the field `F` sampled in the lateral grid. The
+returned array is the complex amplitude as stored in `F`, not accounting for a
+possible wavefront curvature and uniform factor. Call
+[`FourierOptics.true_amplitude`](@ref) to retrieve the complex amplitude with
+all these terms.
+
+"""
+amplitude(F::Field) = F.ampl
+
+"""
+    FourierOptics.true_amplitude(F::Field) -> amp
+
+yields the complex amplitude of the field `F` sampled in the lateral grid.
+Compared to [`FourierOptics.amplitude`](@ref), the returned array accounts for
+a possible wavefront curvature and uniform factor.
+
+The true complex amplitude of the field `F` is given by:
+
+    η*amp[j1,j2]*exp_i((π/(λ*R))⋅x[j1]^2)*exp_i((π/(λ*R))⋅y[j2]^2)
+
+with `amp = amplitude(F)` the complex amplitude as stored in `F`, `η =
+multipler(F)` a uniform factor, `λ = wavelength_in_medium(F)` the wavelength in
+the medium, and `1/R = curvature(F)` the wavefront curvature.
+
+"""
+true_amplitude(F::Field) = true_amplitude!(similar(amplitude(F)), F)
+
+function true_amplitude!(dst::AbstractMatrix, F::Field{T}) where {T}
+    amp = amplitude(F)
+    J₁, J₂ = axes(amp)
+    axes(dst) == axes(J₁, J₂) || throw(DimensionMismatch(
+        "destination array has incompatible axes"))
+    curv = curvature(F)
+    η = multiplier(F)
+    if iszero(curv)
+        if η == oneunit(η)
+            copyto!(dst, amp)
+        else
+            mul!(dst, η, amp)
+        end
+    else
+        δx = grid_step(F)
+        λ = wavelength_in_medium(F)
+        x = RolledCoordinates(F)
+        πρ = π*as(T, δx^2/λ*curv)
+        exp_iπρx² = Vector{Complex{T}}(undef, size(x))
+        axes1(exp_iπρx²) == J₁ == J₂ || throw(DimensionMismatch(
+            "complex amplitude has unexpected axes"))
+        @inbounds for j in eachindex(exp_iπρx², x)
+            exp_iπρx²[j] = exp_i(πρ*x[j]^2)
+        end
+        @inbounds for j₂ in J₂
+            ξ = η*exp_iπρx²[j₂]
+            for j₁ in J₁
+                dst[j₁,j₂] = ξ*exp_iπρx²[j₁]
+            end
+        end
+    end
+    return dst
+end
+
+"""
+    FourierOptics.intensity(F::Field) -> I
+
+yields the intensity of the field `F` sampled in the lateral grid.
+
+"""
+intensity(F::Field) =
+    intensity!(similar(amplitude(F), real(eltype(F))), F)
+
+"""
+    FourierOptics.intensity!(dst, F::Field) -> dst
+
+overwrites `dst` with the intensity of the field `F` sampled in the lateral
+grid.
+
+"""
+function intensity!(dst::AbstractMatrix, F::Field)
+    A = amplitude(F)
+    @assert_same_axes dst A
+    η = abs2(F.fact)
+    if iszero(η)
+        fill!(dst, zero(eltype(dst)))
+    elseif isone(η)
+        @inbounds @simd for i in eachindex(dst, A)
+            dst[i] = abs2(A[i])
+        end
+    else
+        @inbounds @simd for i in eachindex(dst, A)
+            dst[i] = η*abs2(A[i])
+        end
+    end
+    return dst
+end
+
+"""
+    FourierOptics.total_intensity(F::Field)
+
+yields the total intensity of the field `F` at its current position.
+
+"""
+function total_intensity(F::Field{T}) where {T}
+    # FIXME: Assume area in SI units.
+    δx = as(T, grid_step(F)/oneunit(StdLength{T}))
+    η = abs2(F.fact*δx)
+    s = zero(η)
+    if !iszero(η)
+        A = amplitude(F)
+        @inbounds @simd for i in eachindex(A)
+            s += abs2(A[i])
+        end
+    end
+    return η*s
+end
+
+"""
+    FourierOptics.refractive_index(F::Field) -> n
+
+yields the refractive index of the medium for the field `F`.
+
+"""
+refractive_index(F::Field) = F.n
+
+function check_refractive_index(n::Real)
+    (isfinite(n) & (n > zero(n))) || error("refractive index must be positive and finite")
+    return n
+end
+
+"""
+    FourierOptics.wavelength_in_vacuum(F::Field) -> λ₀
+
+yields the wavelength of field `F` in the vacuum.
+
+"""
+wavelength_in_vacuum(F::Field) = F.λ₀
+
+"""
+    FourierOptics.wavelength_in_medium(F::Field) -> λ
+
+yields the wavelength of field `F` in the medium.
+
+"""
+wavelength_in_medium(F::Field) =
+    wavelength_in_vacuum(F)/refractive_index(F)
+
+"""
+    FourierOptics.wavenumber(F::Field) -> k
+
+yields the wave-number `k = 2⋅π⋅n/λ₀ = 2⋅π/λ` for the field `F`.
+
+"""
+wavenumber(F::Field) = 2*refractive_index(F)*π/wavelength_in_vacuum(F)
+
+function check_wavelength(λ::Length)
+    (isfinite(λ) & (λ > zero(λ))) || error("wavelength must be positive and finite")
+    return λ
+end
+
+"""
+    FourierOptics.grid_size(F::Field) -> N
+
+yields the number of samples along any lateral dimension of the field `F`.
+
+"""
+function grid_size(F::Field)
+    @noinline bad_grid_size(n1, n2) =
+        AssertionError("invalid non-square grid size $n1 × $n2")
+    n1, n2 = size(F)
+    n1 == n2 || throw(bad_grid_size(n1, n2))
+    return n1
+end
+
+"""
+    FourierOptics.grid_range(F::Field) -> rng
+
+yields the index range along any lateral dimension of the field `F`.
+
+"""
+grid_range(F::Field) = Base.OneTo(grid_size(F))
+
+"""
+    FourierOptics.grid_step(F::Field) -> δx
+
+yields the current grid sampling step size in field `F`.
+
+"""
+grid_step(F::Field) = F.δx
+
+function check_grid_step(δx::Length)
+    (isfinite(δx) & (δx > zero(δx))) || error("grid step must be positive and finite")
+    return δx
+end
+
+# Private function.
+function _set_grid_step!(F::Field, δx::Length)
+    F.δx = check_grid_step(δx)
+    return nothing
+end
+
+"""
+    Fout = Fin*η
+    Fout = η*Fin
+    Fout = FourierOptics.multiply(Fin, η)
+
+multiplies the complex amplitude of the field `Fin` by `η` and returns the
+resulting field `Fout` leaving `Fin` unchanged. Argument `η` may be a scalar or
+any type of abstract array of the same size as the field. In this latter case,
+the multiplication is performed elementwise. This may be used to apply a
+transmission mask (in amplitude) to the field.
+
+See [`FourierOptics.multiply!`](@ref) for an in-place version.
+
+"""
+multiply(F::Field, η::Union{T,AbstractMatrix{T}}) where {T<:Union{Real,Complex}} =
+    multiply!(copy(F), η)
+Base.:(*)(F::Field, η::Union{T,AbstractMatrix{T}}) where {T<:Union{Real,Complex}} =
+    multiply(F, η)
+Base.:(*)(η::Union{T,AbstractMatrix{T}}, F::Field) where {T<:Union{Real,Complex}} =
+    multiply(F, η)
+
+"""
+    FourierOptics.multiply!(F, η) -> F
+
+multiplies in-place the complex amplitude of the field `F` by `η`. Argument `η`
+may be a scalar or any type of abstract array of the same size as the field
+
+See [`FourierOptics.multiply`](@ref) for an out-place version and for more
+details.
+
+"""
+function multiply!(F::Field, η::Union{Real,Complex})
+    F.fact *= η # in general this is sufficient
+    if iszero(F.fact)
+        # Multiplying by 0 is a shortcut to set the complex amplitude to zero
+        # everywhere.
+        fill!(F.ampl, zero(eltype(F.ampl)))
+    end
+    return F
+end
+
+function multiply!(F::Field, η::AbstractArray{<:Union{Real,Complex}})
+    @assert_same_axes F η
+    @inbounds @simd for i in eachindex(F, η)
+            F[i] *= η[i]
+    end
+    return F
 end
 
 """
@@ -55,7 +419,7 @@ split_beam(F::Field, τ::Real) = split_beam!(copy(F), τ)
     FourierOptics.split_beam!(F, τ) -> Ft, Fr
 
 splits in-place the input field `F` into a transmitted field `Ft` and a
-refected field `Fr` as if an infinitely thin beam-splitter with intensity
+reflected field `Fr` as if an infinitely thin beam-splitter with intensity
 transmission coefficient transmission `τ` is inserted at the curent propagation
 position of the field `F`. The operation is done in-place: the input field `F`
 is modified and returned as one the resulting fields.
@@ -72,335 +436,4 @@ function split_beam!(F::Field{T}, τ::Real) where {T}
     Ft = multiply(F, t) # transmitted field (out-of-place multiplication)
     Fr = multiply!(F, r) # reflected field (in-place multiplication)
     return Ft, Fr
-end
-
-"""
-    FourierOptics.get_amplitude(F::Field) -> amp
-
-yields the complex amplitude of the field `F` at its reference surface.
-
-"""
-get_amplitude(F::Field) = F.ampl
-
-# Implement the abstract array API for fields.
-Base.length(F::Field) = length(get_amplitude(F))
-Base.size(F::Field) = size(get_amplitude(F))
-Base.axes(F::Field) = axes(get_amplitude(F))
-Base.ndims(F::Field) = ndims(typeof(F))
-Base.ndims(::Type{<:Field{T,A}}) where {T,A} = ndims(A)
-Base.eltype(F::Field) = eltype(typeof(F))
-Base.eltype(::Type{<:Field{T,A}}) where {T,A} = eltype(A)
-Base.IndexStyle(::Type{<:Field{T,A,true}}) where {T,A} = IndexLinear()
-@inline function Base.getindex(F::Field{T,A,true}, i::Int) where {T,A}
-    @boundscheck checkbounds(F, i)
-    return @inbounds getindex(get_amplitude(F), i)
-end
-@inline function Base.setindex!(F::Field{T,A,true}, x, i::Int) where {T,A}
-    @boundscheck checkbounds(F, i)
-    @inbounds setindex!(get_amplitude(F), x, i)
-    return F
-end
-Base.IndexStyle(::Type{<:Field{T,A,false}}) where {T,A} = IndexCartesian()
-@inline function Base.getindex(F::Field{T,A,false}, I::Vararg{Int,2}) where {T,A}
-    @boundscheck checkbounds(F, I...)
-    return @inbounds getindex(get_amplitude(F), I...)
-end
-@inline function Base.setindex!(F::Field{T,A,false}, x, I::Vararg{Int,2}) where {T,A}
-    @boundscheck checkbounds(F, I...)
-    @inbounds setindex!(get_amplitude(F), x, I...)
-    return F
-end
-
-"""
-    FourierOptics.get_intensity(F::Field)
-
-yields the intensity of the field `F`.
-
-"""
-get_intensity(F::Field) = abs2.(get_amplitude(F))
-
-"""
-    FourierOptics.get_total_intensity(F::Field)
-
-yields the total intensity of the field `F` at its reference surface.
-
-"""
-get_total_intensity(F::Field) = sum(get_intensity(F)) # FIXME optimize
-
-"""
-    FourierOptics.get_wavelength(F::Field) -> λ
-
-yields the wavelength of field `F`.
-
-"""
-get_wavelength(F::Field) = F.lambda
-
-function check_wavelength(λ::Length)
-    (isfinite(λ) & (λ > zero(λ))) || error("wavelength must be positive and finite")
-    return λ
-end
-
-"""
-    FourierOptics.get_grid_size(F::Field) -> n
-
-yields the number of samples along any dimension of the field `F`.
-
-"""
-function get_grid_size(F::Field)
-    @noinline bad_grid_size(n1, n2) =
-        AssertionError("invalid non-square grid size $n1 × $n2")
-    n1, n2 = size(F)
-    n1 == n2 || throw(bad_grid_size(n1, n2))
-    return n1
-end
-
-"""
-    FourierOptics.get_grid_range(F::Field) -> rng
-
-yields the index range along any dimension of the field `F`.
-
-"""
-get_grid_range(F::Field) = Base.OneTo(get_grid_size(F))
-
-"""
-    FourierOptics.get_grid_step(F::Field) -> Δx
-
-yields the current grid sampling step size in field `F`.
-
-"""
-get_grid_step(F::Field) = F.dx
-
-function check_grid_step(dx::Length)
-    (isfinite(dx) & (dx > zero(dx))) || error("grid step must be positive and finite")
-    return dx
-end
-
-# Private function.
-function _set_grid_step!(F::Field, dx::Length)
-    F.dx = check_grid_step(dx)
-    return nothing
-end
-
-"""
-    FourierOptics.get_grid_step(F::Field, dz::Length) -> Δx′
-
-yields the grid step after applying the *spherical-to-waist* or
-*waist-to-spherical* propagators to the field `F` over a distance `dz`.
-The result is given by:
-
-    Δx′ = λ*abs(dz)/(n*Δx)
-
-with `λ` the wavelength, `n` the number of grid nodes along a dimension, and
-`Δx` the grid step **before** the propagation.
-
-"""
-get_grid_step(F::Field{T}, dz::Length) where {T} = get_grid_step(F, as(Meters{T}, dz))
-function get_grid_step(F::Field{T}, dz::Meters{T}) where {T}
-    n = get_grid_size(F)
-    Δx = get_grid_step(F)
-    λ = get_wavelength(F)
-    return λ*abs(dz)/(n*Δx) :: Meters{T}
-end
-
-"""
-    FourierOptics.get_position(F::Field) -> z
-
-yields the position along the propagation axis of the field `F`.
-
-"""
-get_position(F::Field) = F.z
-
-function _set_position!(F::Field, z::Length)
-    F.z = z
-    return nothing
-end
-
-_increment_position!(F::Field, dz::Length) = _set_position!(F, get_position(F) + dz)
-
-"""
-    FourierOptics.get_minimum_waist_radius(F::Field) -> w
-
-yields the radius of the minimum beam waist for field `F`.
-
-"""
-get_minimum_waist_radius(F::Field) = F.w0
-
-"""
-    FourierOptics.get_minimum_waist_position(F::Field) -> z
-
-yields the position along `z`-axis of the minimum beam waist for field `F`.
-
-"""
-get_minimum_waist_position(F::Field) = F.z_w0
-
-"""
-    FourierOptics.get_Rayleigh_distance(F::Field) -> d
-
-yields the Rayleigh distance from minimum beam waist of field `F` and defined by:
-
-    π⋅w₀^2/λ
-
-with `w₀` the radius of the beam waist and `λ` the wavelength.
-
-The Rayleigh distance from the beam waist (times some factor) specifies the
-boundary of the near and far fields, and thus which reference surface type
-(planar or spherical) is best used to minimize aliasing. Within the Rayleigh
-distance of the waist, the wavefront can usually be fit best with a planar
-reference surface, while outside it is best fit with a curved surface. The
-radius of a reference sphere is equal to the distance from the current position
-to the beam waist.
-
-"""
-function get_Rayleigh_distance(F::Field)
-    λ  = get_wavelength(F)
-    w0 = get_minimum_waist_radius(F)
-    return π*w0^2/λ
-end
-
-"""
-    FourierOptics.get_Rayleigh_factor(F::Field) -> f
-
-yields the Rayleigh factor for the field `F`.
-
-"""
-get_Rayleigh_factor(F::Field) = F.Rayleigh_factor
-
-function check_Rayleigh_factor(η::Real)
-    (isfinite(η) & (η > zero(η))) || error("Rayleigh factor must be positive and finite")
-    return η
-end
-
-function set_Rayleigh_factor!(F::Field, x::Real)
-    F.Rayleigh_factor = check_Rayleigh_factor(x)
-    return nothing
-end
-
-"""
-    FourierOptics.get_waist_radius_at_surface(F::Field) -> w
-
-yields the waist radius at the current surface of field `F`.
-
-"""
-function get_waist_radius_at_surface(F::Field{T}) where {T}
-    z          = get_surface_position(F)
-    z_w0       = get_minimum_waist_position(F)
-    w0         = get_minimum_waist_radius(F)
-    d_Rayleigh = get_Rayleigh_distance(F)
-    return w0*sqrt(one(T) + ((z - z_w0)/d_Rayleigh)^2)
-end
-
-"""
-    FourierOptics.get_focal_ratio(F::Field) -> fratio
-
-yields the focal ratio of the current beam in field `F`:
-
-    fratio = abs(z_w0 - z)/(2w)
-
-with `z_w0` and `z` the positions along the propagation direction of the
-minimum waist and of the current reference surface, and `w` the waist radius at
-the reference surface.
-
-"""
-function get_focal_ratio(F::Field{T}) where {T}
-    z    = get_surface_position(F)
-    z_w0 = get_minimum_waist_position(F)
-    w    = get_waist_radius_at_surface(F)
-    return as(T, abs(z_w0 - z)/(2w))
-end
-
-"""
-    FourierOptics.get_surface_type(F::Field)
-
-yields the type (`:PLANAR` or `:SPHERICAL`) of the current reference surface of
-the field `F`.
-
-"""
-get_surface_type(F::Field) = F.surface_type
-
-function _set_surface_type!(F::Field, type::Symbol)
-    ((type === :SPHERICAL) | (type === :PLANAR)) || throw(ArgumentError(
-        "invalid reference surface type "))
-    F.surface_type = type
-    return nothing
-end
-
-"""
-    FourierOptics.get_field_type(F::Field) -> rng
-
-yields the last field range approximation used to propagate field `F` to its
-current position. Returned value is `:NEAR` if the current reference surface is
-spherical, or `:FAR` if the current surface is planar.
-
-"""
-get_field_type(F::Field) = (get_surface_type(F) === :PLANAR ? :NEAR : :FAR)
-
-"""
-    FourierOptics.get_field_type(F::Field, dz::Length) -> rng
-
-yields the field range condition to propagate the field `F` by a distance `dz`.
-Returned value is `:NEAR` for near field or `:FAR` for far field conditions.
-
-"""
-function get_field_type(F::Field, dz::Length)
-    # Distance after propagation from the waist.
-    distance = abs(get_surface_position(F) - get_minimum_waist_position(F) + dz)
-    # Boundary between the near and far fields.
-    boundary = get_Rayleigh_factor(F)*get_Rayleigh_distance(F)
-    return distance < boundary ? :NEAR : :FAR
-end
-
-"""
-    FourierOptics.get_verbosity(F::Field) -> verb
-
-yields the verbosity lebel for computations with field `F`.
-
-"""
-get_verbosity(F::Field) = F.verbosity
-
-function set_verbosity!(F::Field, verb::Integer)
-    F.verbosity = verb
-    return nothing
-end
-
-is_verbose(F::Field) = get_verbosity(F) > 0
-
-propagate_phase_offset(F::Field) = get_phase_offset(F)
-
-get_phase_offset(F::Field) = F.phase_offset
-
-function set_phase_offset!(F::Field, val::Bool)
-    F.phase_offset = val
-    return nothing
-end
-
-"""
-    FourierOptics.multiply(Fin, α) -> Fout
-
-multiplies the complex amplitude of the field `Fin` by `α` and returns the
-resulting field `Fout`. Argument may also be any type of abstract array.
-
-"""
-multiply(A::AbstractArray, α::Union{Real,Complex}) = multiply!(copy(F), α)
-
-"""
-    FourierOptics.multiply!(F, α) -> F
-
-multiplies in-place the complex amplitude of the field `F` by `α`.
-
-"""
-function multiply!(F::Field, α::Union{Real,Complex})
-    multiply!(get_amplitude(F), α)
-    return F
-end
-
-function multiply!(A::AbstractArray, α::Union{Real,Complex})
-    if iszero(α)
-        fill!(A, zero(eltype(A)))
-    elseif !isone(α)
-        α = convert_multiplier(α, A)
-        @inbounds @simd for i in eachindex(A)
-            A[i] *= α
-        end
-    end
-    return A
 end

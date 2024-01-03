@@ -190,7 +190,7 @@ convert_multiplier(α::Complex, ::Type{<:AbstractArray{Complex{T}}}) where {T<:A
     throw(ArgumentError("invalid multiplier of type `$(typeof(α))` for array with elements of type `$(eltype(A))`"))
 
 # Copy a field between two similar structures.
-@inline copy_field!(dst::T, src, key::Symbol) where {T} =
+@inline copy_struct_field!(dst::T, src, key::Symbol) where {T} =
     setfield!(dst, key, convert(fieldtype(T, key), getfield(src, key)))
 
 """

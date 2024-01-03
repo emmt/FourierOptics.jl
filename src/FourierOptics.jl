@@ -11,6 +11,10 @@ export
     propagate, propagate!,
     forge_mask, forge_mask!,
     pupil,
+    split_beam, split_beam!,
+    intensity, total_intensity, amplitude, true_amplitude, curvature,
+    refractive_index, wavenumber, wavelength_in_medium, wavelength_in_vacuum,
+    grid_size, grid_step,
 
     # Exports from Unitful.
     Length,
