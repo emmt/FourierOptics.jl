@@ -106,6 +106,20 @@ infinity(::Type{Q}) where {Q<:Unitful.AbstractQuantity{T}} where {T<:AbstractFlo
 @noinline infinity(::Type{T}) where {T} = error("infinity is not defined for type `$T`")
 
 """
+    FourierOptics.interpolate(a, b, f) -> x
+
+yields linearly interpolated value between `a` and `b` by a fraction `f`:
+
+    x = a + f*(b - a)             # if f is dimensionless
+      = (oneunit(f) - f)*a + f*b  # otherwise, e.g. if f has units
+
+Hence, if `f` is a real, then `f = 0` yields `a` while `f = 1` yields `b`.
+
+"""
+interpolate(a, b, f::Dimensionless{Real}) = a + f*(b - a)
+interpolate(a, b, f) = (oneunit(f) - f)*a + f*b
+
+"""
     FourierOptics.exp_i(ϕ) -> exp(i⋅ϕ)
 
 yields `exp(i⋅ϕ)` computed efficiently. if Phase `ϕ` is not an angular
