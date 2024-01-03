@@ -2,6 +2,14 @@ const ArrayAxis = Union{Integer,AbstractUnitRange{<:Integer}}
 const ArrayAxes{N} = NTuple{N,ArrayAxis}
 
 """
+    FourierOptics.i
+
+is the imaginary unit.
+
+"""
+const i = im
+
+"""
     FourierOptics.Float
 
 is the default floating-point type for computations.

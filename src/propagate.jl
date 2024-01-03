@@ -1,244 +1,365 @@
-const default_to_plane = false
+const default_propagation_method = :Fresnel2
 
 """
-    FourierOptics.propagate(Fin::Field, dz::Length; to_plane=$default_to_plane) -> Fout
+    FourierOptics.propagate(Fin::Field, Δz::Length; by=:$default_propagation_method, kwds...) -> Fout
 
-propagates the input field `Fin` over a distance `dz` and returns the resulting
-field `Fout`. This propagation method automatically chooses among near-to-near,
-near-to-far, far-to-near, and far-to-far field propagators.
+propagates the input field `Fin` over a distance `Δz` and returns the resulting
+field `Fout`. The input field `Fin` is left unmodified, method
+[`FourierOptics.propagate!`](@ref) may be used for in-place propagation.
 
-Keyword `to_plane` specifies whether to force propagation to a planar reference
-surface.
+Keyword `by` specifies the method to perform the propagation:
+
+* `by = :Fresnel1` to apply a single-FFT Fresnel propagation method. This
+  propagation method costs 1 FTT and imposes that the output lateral sampling
+  step be:
+
+  ```julia
+  δx1 = λ⋅|Δz|/(N⋅δx0)
+  ```
+
+  with `λ` the wavelength in the propagation medium, `N` the number of samples
+  along a dimension of the transverse plane, and `δx0` the lateral sampling
+  step before propagation. Single-FFT Fresnel propagation method is adapted for
+  *far field* propagation, that is for:
+
+  ```julia
+  |Δz| ≥ min(D,N⋅δx0)⋅δx0/λ
+  ```
+
+  with `D` the diameter of the beam.
+
+* `by = :Fresnel2` to apply a 2-step Fresnel propagation method. Keyword
+  `sampling = ±δx1` can be used to specify the sampling step `δx1` after
+  propagation (up to a change of sign). The value of the `sampling` keyword may
+  be negative to use a negative algebraic magnification, the output sampling
+  step is `δx1 = abs(sampling)`. By default, the sampling step of `F` is
+  retained and the method is equivalent to an angular spectrum method under the
+  paraxial approximation. The 2-step Fresnel propagation method costs 2 FTTs
+  and is equivalent to the fractional Fourier transform method.
+
+* `by = :RayleighSommerfeld` to propagate the field by an angular spectrum
+  method which amounts to convolving the complex amplitude by the
+  Rayleigh-Sommerfeld propagation kernel. Keyword `no_evanescent_waves`
+  (`false` by default) indicates whether to explicitly filter out evanescent
+  waves.
+
+*Fresnel propagation* amounts to assuming *paraxial conditions*, that is small
+diffraction angles or, equivalently, spatial frequencies much smaller than
+`1/λ` with `λ` the wavelength in the propagation medium.
+
+*Angular spectrum* method means that the propagation is performed by convolving
+the complex amplitude by the propagation kernel and using the sampled Fourier
+transform of the kernel, the so-called propagation transfer function. Angular
+spectrum propagation costs 2 FFTs and leaves the lateral sampling step `δx`
+unchanged. Angular spectrum method is adapted for *near field* propagation,
+that is for:
+
+    |Δz| ≤ min(D,N⋅δx)⋅δx/λ
+
+with `D` the diameter of the beam, `N` the number of samples along a dimension
+of the transverse plane, and `λ` the wavelength in the propagation medium.
 
 """
 propagate(F::Field, args...; kwds...) = propagate!(copy(F), args...; kwds...)
 
 """
-    FourierOptics.propagate!(F::Field, dz::Length; to_plane=$default_to_plane) -> F
+    FourierOptics.propagate!(F::Field, Δz::Length; kwds...) -> F
 
-propagates in-place the field `F` over a distance `dz`. This propagation method
-automatically chooses among near-to-near, near-to-far, far-to-near, and
-far-to-far field propagators.
-
-Keyword `to_plane` specifies whether to force propagation to a planar reference
-surface.
+propagates in-place the field `F` over a distance `Δz`. See
+[`FourierOptics.propagate`](@ref) for a description.
 
 """
-function propagate!(F::Field, dz::Length;
-                    to_plane::Bool = default_to_plane)
-    # Code originally written in IDL by John Krist (JPL), February 2005.
-    # Adapted to Julia by Éric Thiébaut, November 2023.
-    field_type_old = get_field_type(F)
-    field_type_new = to_plane ? :NEAR : get_field_type(F, dz)
-    is_verbose(F) && println(
-        "Propagating by ", dz, " with a ", lowercase(string(field_type_old)),
-        "-to-", lowercase(string(field_type_new)), " propagator.")
-    z_w0 = get_minimal_waist_position(F)
-    z_old = get_surface_position(F)
-    z_new = z_old + dz
-    if field_type_old === :NEAR
-        # Current reference surface is planar, previous propagation was to the
-        # near field.
-        if field_type_new === :NEAR
-            # Apply near-to-near field propagator.
-            _apply_ptp!(F, dz)
-        else
-            # Apply near-to-far field propagator. First from current position
-            # to the waist, then from the waist to the new position.
-            _apply_ptp!(F, z_w0 - z_old)
-            _apply_wts!(F, z_new - z_w0)
-        end
-    else
-        # Current reference surface is spherical, previous propagation was to
-        # the far field.
-        if field_type_new === :NEAR
-            # Apply far-to-near field propagator.
-            _apply_stw!(F, z_w0 - z_old)
-            _apply_ptp!(F, z_new - z_w0)
-        else
-            # Apply far-to-far field propagator.
-            _apply_stw!(F, z_w0 - z_old)
-            _apply_wts!(F, z_new - z_w0)
+propagate!(F::Field, Δz::Length; by=default_propagation_method, kwds...) =
+    propagate!(by, F, Δz; kwds...)
+
+propagate!(by::Symbol, F::Field, Δz::Length; kwds...) =
+    propagate!(Val(by), F, Δz; kwds...)
+
+# Catch errors.
+@noinline propagate!(by::Val{M}, F::Field, Δz::Length; kwds...) where {M} =
+    throw(ArgumentError("unknown propagation method `$M`"))
+
+function propagate!(by::Val{:Fresnel1}, F::Field, Δz::Length)
+    # Retrieve current field parameters.
+    Δz = standardize(F, Δz)
+    iszero(Δz) && return F
+    δx = grid_step(F)
+    λ = wavelength_in_medium(F)
+    k = wavenumber(F)
+    N = grid_size(F)
+
+    # Propagate the complex amplitude.
+    ρ = (δx^2/λ)*(curvature(F) + inv(Δz))
+    println("ρ = $ρ")
+    apply_quadratic_phase_factor!(F, ρ; planar=true)
+    apply_fft!(F, (Δz ≥ zero(Δz) ? -1 : 1))
+    F.curv = inv(Δz) # set resulting wavefront curvature
+
+    # Update field parameters other than the complex amplitude and the
+    # wavefront curvature.
+    F.fact *= δx^2*exp_i(k*Δz)/(i*λ*Δz) # scale complex amplitude
+    F.δx = λ*abs(Δz)/(N*δx) # update lateral sampling step
+    F.z += Δz # update longitudinal position
+    return F
+end
+
+function propagate!(by::Val{:Fresnel2}, F::Field, Δz::Length;
+                    sampling::Length = grid_step(F))
+    # Retrieve current field parameters.
+    Δz = standardize(F, Δz)
+    iszero(Δz) && return F
+    δx1 = standardize(F, sampling)
+    δx0 = grid_step(F)
+    gamma = δx1/δx0 # algebraic magnification
+    δx1 = abs(δx1) # output sampling step is always positive
+    λ = wavelength_in_medium(F)
+    k = wavenumber(F)
+    N = grid_size(F)
+
+    # Parameters of the quadratic phase factors.
+    ρ1 = (δx0^2/λ)*(curvature(F) + (one(gamma) - gamma)/Δz)
+    ρ2 = -λ*Δz/(gamma*N^2*δx0^2)
+    ρ3 = gamma*(gamma - one(gamma))*δx0^2/(λ*Δz)
+
+    # Propagate the complex amplitude.
+    apply_quadratic_phase_factor!(F, ρ1; planar=true)
+    apply_fft!(F, -1) # complex amplitude -> angular spectrum
+    apply_quadratic_phase_factor!(F, ρ2)
+    apply_fft!(F, +1) # angular spectrum -> complex amplitude
+    F.curv = (λ/δx1^2)*ρ3 # set resulting wavefront curvature
+
+    # Update field parameters other than the complex amplitude and the
+    # wavefront curvature.
+    F.fact *= exp_i(k*Δz)/(gamma*N^2) # scale complex amplitude
+    F.δx = δx1 # update sampling
+    F.z += Δz # update longitudinal position
+    return F
+end
+
+function propagate!(by::Val{:RayleighSommerfeld}, F::Field, Δz::Length;
+                    no_evanescent_waves::Bool = false)
+    # Retrieve current field parameters.
+    Δz = standardize(F, Δz)
+    iszero(Δz) && return F
+    δx = grid_step(F)
+    λ = wavelength_in_medium(F)
+    k = wavenumber(F)
+    N = grid_size(F)
+    δα = inv(N*δx) # spatial frequency sampling step
+
+    # Parameters for computing the angular spectrum propagation transfer
+    # function.
+    T = floating_point_type(F)
+    kΔz = as(T, k*Δz)
+    λα = as(T, λ*δα)*RolledCoordinates(F) # pseudo-vector of λ*α values
+    λβ = λα                               # pseudo-vector of λ*β values
+    amp = amplitude(F)
+    J₁, J₂ = axes(amp)
+    (axes1(λα) == J₁ && axes1(λβ) == J₂) || throw(DimensionMismatch(
+        "complex amplitude has invalid axes"))
+
+    # Propagate the complex amplitude.
+    apply_quadratic_phase_factor!(F) # make sure wavefront is planar
+    apply_fft!(F, -1) # complex amplitude -> angular spectrum
+    @inbounds for j₂ in J₂
+        λ²β² = λβ[j₂]^2
+        for j₁ in J₁
+            λ²α² = λα[j₁]^2
+            ξ = one(T) - (λ²α² + λ²β²)
+            if ξ > zero(ξ)
+                # Low frequency part: propagating waves.
+                amp[j₁,j₂] *= exp_i(kΔz*sqrt(ξ))
+            elseif ξ < zero(ξ)
+                # High frequency part: evanescent waves.
+                if no_evanescent_waves
+                    amp[j₁,j₂] = zero(eltype(amp))
+                else
+                    amp[j₁,j₂] *= exp(-kΔz*sqrt(-ξ))
+                end
+            end
         end
     end
-    @assert get_surface_type(F) === (field_type_new === :NEAR ? :PLANAR : :SPHERICAL)
-    @assert get_surface_position(F) ≈ z_new
-    is_verbose(F) && println("Total intensity = ", get_total_intensity(F))
+    apply_fft!(F, +1) # angular spectrum -> complex amplitude
+
+    # Update field parameters other than the complex amplitude and the
+    # wavefront curvature.
+    F.fact *= exp_i(k*Δz)/N^2 # scale complex amplitude
+    F.z += Δz # update longitudinal position
     return F
 end
 
 """
-    FourierOptics._apply_ptp!(F::Field, dz::Length) -> F
+    FourierOptics.propagate!(Val(:Mas1999), F::Field, Δz::Length) -> F
 
-propagates in-place a planar input wavefront `F` over distance `dz`, keeping it
-planar.
+propagates the field `F` over a distance `Δz` by the propagation method of Mas
+et al. (Optics Communications, vol. 164, pp. 233–245, 1999) which amounts to
+performing a 2-step Fresnel propagation with a magnification automatically
+chosen.
 
-This private method is used to propagate a planar input wavefront over some
-distance to produce an planar output wavefront. This occurs when both the start
-and end point are both within the Rayleigh distance of focus.
+The operation is done in-place. On output, the grid sampling step is updated.
 
 """
-function _apply_ptp!(F::Field{T}, dz::Length) where {T}
-    #
-    # Near-to-near field propagation amounts to convolving by a kernel whose
-    # Fourier transform is a phasor with a quadratic phase given by:
-    #
-    #     exp(-i*π*λ*dz*(u₁^2 + u₂^2))
-    #
-    # where
-    #
-    #     (u₁,u₂) = (k₁/(n*Δx),k₂/(n*Δx))
-    #
-    # is the 2-dimensional spatial frequency and `(k₁,k₂)` the 2-dimensional
-    # discrete spatial frequency. As an optimiation, expanding the exponential
-    # yields:
-    #
-    #     exp(-i*π*λ*dz*ρ^2) = exp(i*α*k₁^2)*exp(i*α*k₂^2)
-    #
-    # with `α = -π*λ*dz/(n*Δx)^2`.
-    #
-    # Originally written by John Krist (JPL), February 2005. Updated by John
-    # Krist, (JPL) Oct 2013. Adapted to Julia by Éric Thiébaut, November 2023.
-    #
-    @assert F.reference_surface === :PLANAR
-    is_verbose(F) && println("PTP: dz = ", dz)
-    if !iszero(dz) # FIXME use some small threshold
-        dz = as(Meters{T}, dz) # to avoid multiple conversions
-        λ = get_wavelength(F)
-        n = get_grid_size(F)
-        Δx = get_grid_step(F)
-        _apply_fft!(F, -1) # apply forward orthogonal FFT
-        _apply_quadratic_phase!(F, -π*λ*dz/(n*Δx)^2, Frequency(F))
-        _apply_fft!(F, +1) # apply backward orthogonal FFT
-        if propagate_phase_offset(F); multiply!(F, exp_i(2π*dz/λ)); end
-        _increment_position!(F, dz)
+function propagate!(by::Val{:Mas1999}, F::Field, Δz::Length; other::Bool=false)
+    Δz = standardize(F, Δz)
+    iszero(Δz) && return F
+    λ = wavelength_in_medium(F)
+    δx₀ = grid_step(F)
+    N = grid_size(F)
+    f₁ = N*δx₀^2/λ # far-/near-fields limit
+    #Δx = N*δx
+    #ϕ = atan(λ*Δz/Δx^2)
+    η = sqrt(1 + (Δz/f₁)^2) # magnification factor
+    # displacement to intermediate plane:
+    Δzₘ = Δz/(other ? η - one(η) : one(η) + η)
+    propagate!(:Fresnel1, F, Δzₘ)
+    propagate!(:Fresnel1, F, Δz - Δzₘ)
+    δx₁ = δx₀*η # output sampling step
+    @assert grid_step(F) ≈ δx₁
+    return F
+end
+
+"""
+    FourierOptics.range(F::Field, D::Length=N⋅δx) -> Δzₘ
+
+yields:
+
+    Δzₘ = D⋅δx/λ
+
+with `δx` the lateral sampling step for the field `F`, and `λ` the wavelength
+in the propagation medium. The range `Δzₘ` is the boundary of the near and the
+far fields for the most simple propagation methods. For a given propagation
+distance `Δz`:
+
+- if `|Δz| < Δzₘ`, then *angular spectrum* propagation method is the most
+  appropriate;
+
+- if `|Δz| > Δzₘ`, then single-FFT *Fresnel* propagation method is the most
+  appropriate.
+
+Optional argument `D` is the largest lateral width of the beam, the full
+lateral size of the field is used by default (`N` is the number of samples
+along a dimension of the transverse plane).
+
+"""
+function range(F::Field, D::Length = grid_size(F)*grid_step(F))
+    D = standardize(F, D)
+    λ = wavelength_in_medium(F)
+    δx = grid_step(F)
+    return D*δx/λ
+end
+
+"""
+    FourierOptics.apply_quadratic_phase_factor!(F) -> F
+
+applies in-place the quadratic phase factor corresponding to the current
+wavefront curvature for the field `F`. If the wavefront curvature is non-zero,
+the complex amplitude stored by `F` is modified and the wavefront curvature is
+set to zero.
+
+"""
+function apply_quadratic_phase_factor!(F::Field)
+    curv = curvature(F)
+    if !iszero(curv)
+        λ = wavelength_in_medium(F)
+        δx = grid_step(F)
+        ρ = (δx^2/λ)*curv
+        apply_quadratic_phase_factor!(F, ρ; planar=true)
     end
-    is_verbose(F) && println("PTP: z = ", get_position(F), "  dx = ", get_grid_step(F))
     return F
 end
 
 """
-    FourierOptics._apply_stw!(F::Field, dz::Length) -> F
+    FourierOptics.apply_quadratic_phase_factor!(F, ρ; planar=false) -> F
 
-applies in-place the *spherical-to-waist* propagator to the field `F` over the
-distance `dz`.
+applies in-place the quadratic phase factor of parameter `ρ` to the complex
+amplitude stored by the field `F`.
 
-This private method propagates from a spherical reference surface that is
-outside the Rayleigh limit from focus to a planar one that is inside.
+If keyword `planar` is true, it is assumed that `ρ` takes into account the
+wavefront curvature and the wavefront curvature of `F` is set to zero;
+otherwise, the wavefront curvature of `F` is left unchanged.
 
 """
-function _apply_stw!(F::Field{T}, dz::Length) where {T}
-    # Code originally written in IDL by by John Krist (JPL), February 2005.
-    # Adapted to Julia by Éric Thiébaut, November 2023.
-    @assert get_surface_type(F) === :SPHERICAL
-    @assert !iszero(dz)
-    is_verbose(F) && println("STW: dz = ", dz)
-    dz = as(Meters{T}, dz) # to avoid multiple conversions
-    λ = get_wavelength(F)
-    n = get_grid_size(F)
-    Δx = get_grid_step(F, dz) # grid step *after* propagation
-    _apply_fft!(F, (dz ≥ zero(dz) ? -1 : +1))
-    _apply_quadratic_phase!(F, (π/(λ*dz))*Δx^2, Frequency(F))
-    if propagate_phase_offset(F); multiply!(F, exp_i(2π*dz/λ)); end
-    _set_grid_step!(F, Δx)
-    _increment_position!(F, dz)
-    _set_surface_type(F, :PLANAR)
-    is_verbose(F) && println("STW: z = ", get_position(F), "  dx = ", get_grid_step(F))
+function apply_quadratic_phase_factor!(F::Field{T},
+                                       ρ::Dimensionless{Real};
+                                       planar::Bool=false) where {T}
+    if !iszero(ρ)
+        apply_quadratic_phase_factor!(amplitude(F), ρ, RolledCoordinates(F))
+    end
+    if planar
+        # Wavefront curvature has been taken into account by ρ.
+        F.curv = zero(F.curv)
+    end
     return F
 end
 
 """
-    FourierOptics._apply_wts!(F::Field, dz::Length) -> F
+    FourierOptics.apply_quadratic_phase_factor!(A, ρ, x) -> A
 
-applies in-place the *waist-to-spherical* propagator to the field `F` over the
-distance `dz`. This operation is done in-place.
+multiplies in-place the complex amplitude `A[j₁,j₂]` by:
 
-This private method propagates from a planar reference surface that is inside
-the Rayleigh distance from focus to a spherical reference surface that is
-outside.
+    exp(i⋅π⋅ρ⋅(x[j₁]^2 + x[j₂]^2)) = q[j₁]⋅q[j₂]
+
+for all 2-dimensional indices `(j₁,j₂)` and with:
+
+    q[j] = exp(i⋅π⋅ρ⋅x[j]^2)
+
+Argument `ρ` is a real factor and argument `x` is the vector of coordinates
+(assumed to be the same for the 2 axes of `A`).
 
 """
-function _apply_wts!(F::Field{T}, dz::Length) where {T}
-    # Code originally written in IDL by by John Krist (JPL), February 2005.
-    # Adapted to Julia by Éric Thiébaut, November 2023.
-    @assert get_surface_type(F) === :PLANAR
-    @assert !iszero(dz)
-    is_verbose(F) && println("WTS: dz = ", dz)
-    dz = as(Meters{T}, dz) # to avoid multiple conversions
-    λ = get_wavelength(F)
-    n = get_grid_size(F)
-    Δx = get_grid_step(F) # grid step *before* propagation
-    _apply_quadratic_phase!(F, (π/(λ*dz))*Δx^2, Frequency(F))
-    _apply_fft!(F, (dz ≥ zero(dz) ? -1 : +1))
-    if propagate_phase_offset(F); multiply!(F, exp_i(2π*dz/λ)); end
-    Δx = get_grid_step(F, dz) # grid step *after* propagation
-    _set_grid_step!(F, Δx)
-    _increment_position!(F, dz)
-    _set_surface_type(F, :SPHERICAL)
-    is_verbose(F) && println("WTS: z = ", get_position(F), "  dx = ", get_grid_step(F))
-    return F
+function apply_quadratic_phase_factor!(A::AbstractMatrix{Complex{T}},
+                                       ρ::Dimensionless{Real},
+                                       x::AbstractVector{<:Real}) where {T<:AbstractFloat}
+    if !iszero(ρ)
+        # Check indices.
+        J = axes(x, 1)
+        axes(A) == (J, J) || throw(DimensionMismatch("complex amplitude has incompatible axes"))
+
+        # Allocate workspace.
+        q = similar(A, Complex{T}, (J,))
+
+        # Call unsafe version (which can assume @inbounds) with `ρ` converted
+        # to a bare real of suitable floating-point type.
+        unsafe_apply_quadratic_phase_factor!(A, as(T, ρ), x, q)
+    end
+    return A
 end
 
-# FIXME for func in (_apply_ptp!, _apply_stw!, _apply_wts!)
-# FIXME     @eval $func(F::Field{T}, dz::Length) where {T} = $func(F, as(Meters{T}, dz))
-# FIXME end
-
-"""
-    FourierOptics._apply_quadratic_phase!(F::Field, α, x) -> F
-
-multiplies in-place the complex amplitude at every 2-dimensional index
-`(j₁,j₂)` of the field `F` by:
-
-    exp(i*α*(x[j₁]^2 + x[j₂]^2)) = q[j₁]*q[j₂]
-
-with:
-
-    q[j] = exp(i*α*x[j]^2)
-
-Argument `α` is a real factor and argument `x` is the vector of coordinates
-(assumed to be the same for the 2 axes of the field).
-
-"""
-function _apply_quadratic_phase!(F::Field{T},
-                                 α::Dimensionless{Real},
-                                 x::AbstractVector{<:Real}) where {T}
-    # Convert `α` to a bare real of the correct floating-point type.
-    return _apply_quadratic_phase!(F, as(T, α), x)
-end
-
-# FIXME: In the future, use x and y.
-function _apply_quadratic_phase!(F::Field{T}, α::T, x::AbstractVector{<:Real}) where {T}
-    ampl = get_amplitude(F)
-    J₁, J₂ = axes(ampl)
-    J = axes(x,1)
-    @assert J == J₁ == J₂
-    q = similar(ampl, Complex{T}, axes(x))
-    @assert axes(q) == (J,)
-    @inbounds @simd for j in J
+function unsafe_apply_quadratic_phase_factor!(A::AbstractMatrix{Complex{T}},
+                                              ρ::T,
+                                              x::AbstractVector{<:Real},
+                                              q::AbstractVector{Complex{T}}) where {T}
+    # NOTE: This method is not called if ρ = 0.
+    πρ = π*ρ
+    @inbounds @simd for j in eachindex(q, x)
         xⱼ = as(T, x[j])
-        q[j] = exp_i(α*xⱼ^2)
+        q[j] = exp_i(πρ*xⱼ^2)
     end
+    J₁, J₂ = axes(A)
     @inbounds for j₂ in J₂
         @simd for j₁ in J₁
-            ampl[j₁,j₂] *= q[j₁]*q[j₂]
+            A[j₁,j₂] *= q[j₁]*q[j₂]
         end
     end
-    return F
+    return nothing
 end
 
 """
-    FourierOptics._apply_fft!(F::Field, dir) -> F
+    FourierOptics.apply_fft!(F::Field, dir) -> F
 
-applies the orthogonal Fast Fourier Transform (FFT) to the complex amplitude in
-the field `F`. Argument `dir` specifies the sign of the argument in the complex
-exponential of the transform: if `dir < 0`, the direct orthogonal FFT is
-applied; otherwise, `dir > 0` and the inverse orthogonal FFT is applied.
+applies the Fast Fourier Transform (FFT) to the complex amplitude array stored
+by the field `F`. Argument `dir` specifies the sign of the argument in the
+complex exponential of the transform: if `dir < 0`, the forward FFT is applied;
+otherwise, `dir > 0` and the backward FFT is applied.
+
+An error is thrown if the wavefront has a non-zero curvature.
+
+The sampling step is left unchanged.
 
 """
-function _apply_fft!(F::Field{T}, dir::Integer) where {T}
-    # Apply in-place complex-complex forward/backward FFT transform, then multiply
-    # by 1/sqrt(length(F)).
-    ampl = get_amplitude(F)
+function apply_fft!(F::Field{T}, dir::Signed) where {T}
+    iszero(curvature(F)) || error("FFT not applicable with non-zero wavefront curvature")
+    ampl = amplitude(F)
     if dir < zero(dir)
         mul!(ampl, F.forward_plan, ampl)
     elseif dir > zero(dir)
@@ -246,7 +367,5 @@ function _apply_fft!(F::Field{T}, dir::Integer) where {T}
     else
         throw(ArgumentError("FFT direction has undefinite sign"))
     end
-    α = inv(sqrt(as(T, length(ampl)))) # α = 1/√(n₁*n₂)
-    multiply!(ampl, α)
     return F
 end
