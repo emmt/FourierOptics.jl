@@ -10,26 +10,87 @@ default_coordinates_center(inds::AbstractUnitRange{<:Integer}) =
 
 # Constructors for array coordinates and frequencies.
 Coordinates(F::Field) = Coordinates(axes(F)[1])
-Frequencies(F::Field) = Frequencies(axes(F)[1])
+RolledCoordinates(F::Field) = RolledCoordinates(axes(F)[1])
 Coordinates(len::Integer) = Coordinates(Base.OneTo{Int}(len))
 Coordinates(len::Integer, center::Integer) = Coordinates(Base.OneTo{Int}(len), center)
-Frequencies(len::Integer) = Frequencies(Base.OneTo{Int}(len))
+RolledCoordinates(len::Integer) = RolledCoordinates(Base.OneTo{Int}(len))
+
+Base.show(io::IO, ::MIME"text/plain", x::AbstractCoordinates) = show(io, x)
+Base.show(io::IO, x::Coordinates) = print(io, "Coordinates(", first(x), ":", last(x), ")")
+Base.show(io::IO, x::RolledCoordinates) = print(io, "RolledCoordinates(", length(x), ")")
+Base.show(io::IO, x::ScaledCoordinates) = begin
+    #=
+    print(io, "ScaledCoordinates(", x.step, "*")
+    show(io, x.coords)
+    print(io, ")")
+    =#
+    print(io, x.step, "*")
+    show(io, x.coords)
+end
+
+Base.:(*)(α::Number, x::ScaledCoordinates) = (α*x.step)*x.coords
+Base.:(*)(α::Number, x::AbstractCoordinates) = ScaledCoordinates(α, x)
+Base.:(*)(x::AbstractCoordinates, α::Number) = α*x
+Base.:(\)(α::Number, x::ScaledCoordinates) = (x.step/α)*x.coords
+Base.:(\)(α::Number, x::AbstractCoordinates) = inv(α)*x
+Base.:(/)(x::AbstractCoordinates, α::Number) = α\x
+
+Base.broadcasted(::typeof(*), α::Number, x::AbstractCoordinates) = α*x
+Base.broadcasted(::typeof(*), x::AbstractCoordinates, α::Number) = α*x
+Base.broadcasted(::typeof(\), α::Number, x::AbstractCoordinates) = α\x
+Base.broadcasted(::typeof(/), x::AbstractCoordinates, α::Number) = α\x
+
+for type in (:Coordinates, :RolledCoordinates, :ScaledCoordinates)
+    if type === :ScaledCoordinates
+        @eval begin
+            convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
+            convert_eltype(::Type{T}, obj::$type) where {T} =
+                (as(T, obj.step)*obj.coords) :: AbstractVector{T}
+        end
+    else
+        @eval begin
+            convert_eltype(::Type{Int}, obj::$type) = obj
+            convert_eltype(::Type{T}, obj::$type) where {T} = as_eltype(T, obj)
+        end
+    end
+end
 
 # Implement abstract array API for coordinates.
-Base.length(A::AbstractCoordinates) = length(A.indices)
-Base.axes(A::AbstractCoordinates) = (A.indices,)
-Base.size(A::AbstractCoordinates) = (length(A),)
+Base.length(x::AbstractCoordinates) = length(indices(x))
+Base.axes(x::AbstractCoordinates) = (indices(x),)
+Base.size(x::AbstractCoordinates) = (length(x),)
 Base.IndexStyle(::Type{<:AbstractCoordinates}) = IndexLinear()
-Base.firstindex(A::AbstractCoordinates) = first(A.indices)
-Base.lastindex(A::AbstractCoordinates) = last(A.indices)
-@inline function Base.getindex(A::Coordinates, i::Int)
-    @boundscheck checkbounds(A, i)
-    return i - A.center
+Base.firstindex(x::AbstractCoordinates) = first(indices(x))
+Base.lastindex(x::AbstractCoordinates) = last(indices(x))
+@inline function Base.getindex(x::AbstractCoordinates, i::Int)
+    @boundscheck checkbounds(x, i)
+    return unsafe_getindex(x, i)
 end
-@inline function Base.getindex(A::Frequencies, i::Int)
-    @boundscheck checkbounds(A, i)
-    return ifelse(i ≤ A.half, i - firstindex(A), i - lastindex(A) - 1)
+@inline function Base.getindex(x::ScaledCoordinates, i::Int)
+    @boundscheck checkbounds(x, i)
+    return x.step*unsafe_getindex(x.coords, i)
 end
+Base.step(x::AbstractCoordinates) = 1 # FIXME: nearly correct
+Base.step(x::ScaledCoordinates) = x.step
+
+indices(x::AbstractCoordinates) = x.indices
+indices(x::ScaledCoordinates) = indices(x.coords)
+center(x::Coordinates) = x.center
+
+unsafe_getindex(x::Coordinates, i::Int) = i - center(x)
+unsafe_getindex(x::RolledCoordinates, i::Int) =
+    i - ifelse(i ≤ x.half, firstindex(x), lastindex(x) + 1)
+
+Base.iterate(x::AbstractCoordinates, i::Int = firstindex(x)) =
+    i > lastindex(x) ? nothing : (unsafe_getindex(x, i), i + 1)
+
+Base.minimum(x::Coordinates) = unsafe_getindex(x, lastindex(x))
+Base.maximum(x::Coordinates) = unsafe_getindex(x, firstindex(x))
+
+Base.minimum(x::RolledCoordinates) = unsafe_getindex(x, x.half + 1)
+Base.maximum(x::RolledCoordinates) = unsafe_getindex(x, x.half)
+
+Base.copy(x::AbstractCoordinates) = x
 
 """
     FourierOptics.infinity(x)

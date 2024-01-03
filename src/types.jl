@@ -141,7 +141,20 @@ along an array axis. Usually such objects are built so as to have the same
 indices as the corresponding array axis.
 
 """
-abstract type AbstractCoordinates{T}  <: AbstractVector{T} end
+abstract type AbstractCoordinates{T} <: AbstractVector{T} end
+
+# Coordinates resulting from (element-wise) multiplication of coordinates by a
+# factor. The constructor is automatically called by the `*` operation.
+struct ScaledCoordinates{T,C<:AbstractCoordinates} <: AbstractCoordinates{T}
+    step::T
+    coords::C
+    function ScaledCoordinates(factor::Number, coords::AbstractCoordinates)
+        @assert !(coords isa ScaledCoordinates)
+        @assert Base.step(coords) === 1
+        step = factor*oneunit(eltype(coords))
+        return new{typeof(step),typeof(coords)}(step, coords)
+    end
+end
 
 """
     FourierOptics.Coordinates(inds[, cen])
@@ -158,18 +171,19 @@ struct Coordinates{I<:AbstractUnitRange{Int}} <: AbstractCoordinates{Int}
     indices::I  # range of valid indices
     center::Int # index of center
     function Coordinates(indices::I,
-                        center::Integer = default_coordinates_center(indices),
-                        ) where {I<:AbstractUnitRange{Int}}
+                         center::Integer = default_coordinates_center(indices),
+                         ) where {I<:AbstractUnitRange{Int}}
         return new{I}(indices, center)
     end
 end
 
 """
-    FourierOptics.Frequencies(inds)
+    FourierOptics.RolledCoordinates(inds)
 
-yields a lightweight vector-like object whose elements give the discrete FFT
-frequencies along an array axis with indices `inds`. If argument `inds` is an
-integer, it is assumed to be the length of an array axis with 1-based indices.
+yields a lightweight vector-like object whose elements give the rolled
+coordinates (i.e., as assumed by the FFT) along an array axis with indices
+`inds`. If argument `inds` is an integer, it is assumed to be the length of an
+array axis with 1-based indices.
 
 The same conventions as in `fftshift` and `ifftshift` are assumed. In other
 words, if `n` is the length of the considered axis, then the discrete
@@ -180,10 +194,10 @@ frequencies are:
     [0, 1, ..., n÷2 - 1, -(n÷2), 1 - (n÷2), ..., -2, -1]    if `n` is even
 
 """
-struct Frequencies{I<:AbstractUnitRange{Int}} <: AbstractCoordinates{Int}
+struct RolledCoordinates{I<:AbstractUnitRange{Int}} <: AbstractCoordinates{Int}
     indices::I # range of valid indices
     half::Int  # index of positive Nyquist frequency
-    function Frequencies(indices::I) where {I<:AbstractUnitRange{Int}}
+    function RolledCoordinates(indices::I) where {I<:AbstractUnitRange{Int}}
         n = length(indices)
         half = first(indices) + (isodd(n) ? n÷2 : n÷2 - 1)
         return new{I}(indices, half)
