@@ -10,6 +10,7 @@ export
     PolygonalAperture, PolygonalObscuration,
     propagate, propagate!,
     forge_mask, forge_mask!,
+    insert_lens, insert_lens!,
     pupil,
     split_beam, split_beam!,
     intensity, total_intensity, amplitude, true_amplitude, curvature,
