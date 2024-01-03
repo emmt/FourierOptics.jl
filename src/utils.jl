@@ -132,12 +132,6 @@ function exp_i(ϕ::Union{Dimensionless{Real},Angle})
     return complex(cosϕ, sinϕ)
 end
 
-function reset!(F::Field)
-    ampl = get_amplitude(F)
-    fill!(ampl, one(eltype(ampl)))
-    return F
-end
-
 floating_point_type(A::Field) = floating_point_type(typeof(A))
 floating_point_type(::Type{<:Field{T}}) where {T} = T
 
