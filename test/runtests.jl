@@ -43,4 +43,7 @@ using Unitful
             @test getfield(F, key) === getfield(Fcpy, key) || getfield(F, key) == getfield(Fcpy, key)
         end
     end
+
+    include("test/test-masks.jl")
+    test(FourierOptics.GeometricObject)
 end
