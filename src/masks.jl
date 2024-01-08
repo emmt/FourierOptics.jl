@@ -81,6 +81,9 @@ masks.
 Box(ll::Point, ur::Point) = Box{promote_type(eltype(ll),eltype(ur))}(ll, ur)
 Box(ll::TwoTuple, ur::TwoTuple) = Box(Point(ll), Point(ur))
 Box{T}(ll::TwoTuple, ur::TwoTuple) where {T} = Box{T}(Point(ll), Point(ur))
+@inline Box(; kwds...) = build(Box; kwds...)
+@inline Box{T}(; kwds...) where {T} = build(Box{T}; kwds...)
+@inline build(::Type{T}; xmin, xmax, ymin, ymax) where{T<:Box} = T((xmin,ymin), (xmax,ymax))
 
 """
     FourierOptics.Rectangle{T}(p0::Point, p1::Point)
@@ -100,6 +103,9 @@ contains at least a point).
 Rectangle(p0::Point, p1::Point) = Rectangle{promote_type(eltype(p0),eltype(p1))}(p0, p1)
 Rectangle(p0::TwoTuple, p1::TwoTuple) = Rectangle(Point(p0), Point(p1))
 Rectangle{T}(p0::TwoTuple, p1::TwoTuple) where {T} = Rectangle{T}(Point(p0), Point(p1))
+@inline Rectangle(; kwds...) = build(Rectangle; kwds...)
+@inline Rectangle{T}(; kwds...) where {T} = build(Rectangle{T}; kwds...)
+@inline build(::Type{T}; x0, y0, x1, y1) where{T<:Rectangle} = T((x0,y0), (x1,y1))
 
 """
     FourierOptics.Circle{T}(center::Point, radius)
