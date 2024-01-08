@@ -171,14 +171,19 @@ function Base.collect(obj::MaskObject, objs::MaskObject...)
     return MaskObject{T}[obj, objs...]
 end
 
-Base.Tuple(obj::Union{Point,Box,Rectangle}) = parts(obj)
+Base.Tuple(obj::Union{Point,Box,Rectangle,Circle}) = parts(obj)
 
+# Iterating over a basic geometrical object is like iteration over the
+# arguments of the most basic constructor.
 @inline Base.iterate(obj::Point, i::Int=1) =
     i == 1 ? (obj.x, 2) :
     i == 2 ? (obj.y, 3) : nothing
 @inline Base.iterate(obj::RectangularObject, i::Int=1) =
     i == 1 ? (first(obj), 2) :
     i == 2 ? (last( obj), 3) : nothing
+@inline Base.iterate(obj::Circle, i::Int=1) =
+    i == 1 ? (center(obj), 2) :
+    i == 2 ? (radius(obj), 3) : nothing
 
 Base.show(io::IO, obj::Point) =
     print(io, "Point(", obj.x, ", ", obj.y, ')')
