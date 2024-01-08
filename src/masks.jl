@@ -214,6 +214,60 @@ function Base.show(io::IO, obj::PolygonalObject)
     print(io, (flag ? "))" : ")"))
 end
 
+Base.:(==)(a::Point, b::Point) =
+    (a.x == b.x) &
+    (a.y == b.y)
+Base.:(==)(a::Box, b::Box) =
+    (a.xmin == b.xmin) &
+    (a.ymin == b.ymin) &
+    (a.xmax == b.xmax) &
+    (a.ymax == b.ymax)
+Base.:(==)(a::Rectangle, b::Rectangle) =
+    (a.x0 == b.x0) &
+    (a.y0 == b.y0) &
+    (a.x1 == b.x1) &
+    (a.y1 == b.y1)
+Base.:(==)(a::Circle, b::Circle) =
+    (a.x == b.x) &
+    (a.y == b.y) &
+    (a.r == b.r)
+function Base.:(==)(a::Polygon, b::Polygon)
+    va, vb = vertices(a), vertices(b)
+    len = length(va)
+    length(vertices(b)) == len || return false
+    @inbounds for i in 1:len
+        va[i] == vb[i] || return false
+    end
+    return true
+end
+
+Base.isapprox(a::Point, b::Point; kwds...) =
+    isapprox(a.x, b.x; kwds...) &&
+    isapprox(a.y, b.y; kwds...)
+Base.isapprox(a::Box, b::Box; kwds...) =
+    isapprox(a.xmin, b.xmin; kwds...) &&
+    isapprox(a.ymin, b.ymin; kwds...) &&
+    isapprox(a.xmax, b.xmax; kwds...) &&
+    isapprox(a.ymax, b.ymax; kwds...)
+Base.isapprox(a::Rectangle, b::Rectangle; kwds...) =
+    isapprox(a.x0, b.x0; kwds...) &&
+    isapprox(a.y0, b.y0; kwds...) &&
+    isapprox(a.x1, b.x1; kwds...) &&
+    isapprox(a.y1, b.y1; kwds...)
+Base.isapprox(a::Circle, b::Circle; kwds...) =
+    isapprox(a.x, b.x; kwds...) &&
+    isapprox(a.y, b.y; kwds...) &&
+    isapprox(a.r, b.r; kwds...)
+function Base.isapprox(a::Polygon, b::Polygon; kwds...)
+    va, vb = vertices(a), vertices(b)
+    len = length(va)
+    length(vertices(b)) == len || return false
+    @inbounds for i in 1:len
+        isapprox(va[i], vb[i]; kwds...) || return false
+    end
+    return true
+end
+
 for type in (:Point, :Box, :Rectangle, :Circle, :Polygon,
              :RectangularAperture, :RectangularObscuration,
              :CircularAperture, :CircularObscuration,
