@@ -387,19 +387,31 @@ Base.:(-)(a::Point,   b::Polygon) = Polygon(map(Fix1(-, a), vertices(b)))
 Base.:(*)(a::Number,  b::Polygon) = Polygon(map(Fix1(*, a), vertices(b)))
 Base.:(/)(a::Polygon, b::Number) = Polygon(map(Fix2(/, b), vertices(a)))
 
+# Unary minus and scaling by a negative value is different for a box and a
+# rectangle. Other operations are identical for boxes and rectangles.
+Base.:(-)(a::Box) = Box(-last(a), -first(a))
+Base.:(-)(a::Point,  b::Box) = Box(a - last(b), a - first(b))
+function Base.:(*)(a::Number, b::Box)
+    pnts = parts(b; swap = a < zero(a))
+    return Box(a*pnts[1], a*pnts[2])
+end
+function Base.:(/)(a::Box, b::Number)
+    pnts = parts(a; swap = b < zero(b))
+    return Box(pnts[1]/b, pnts[2]/b)
+end
+Base.:(-)(a::Rectangle) = Rectangle(-first(a), -last(a))
+Base.:(-)(a::Point,  b::Rectangle) = Rectangle(a - first(b), a - last(b))
+Base.:(*)(a::Number, b::Rectangle) = Rectangle(a*first(b), a*last(b))
+Base.:(/)(a::Rectangle,  b::Number) = Rectangle(first(a)/b, last(a)/b)
 for type in (:Box, :Rectangle)
     @eval begin
-        Base.:(-)(a::$type) = $type(-first(a), -last(a))
         Base.:(+)(a::$type,  b::Point) = $type(first(a) + b, last(a) + b)
         Base.:(-)(a::$type,  b::Point) = $type(first(a) - b, last(a) - b)
-        Base.:(-)(a::Point,  b::$type) = $type(a - first(b), a - last(b))
-        Base.:(*)(a::Number, b::$type) = $type(a*first(b), a*last(b))
-        Base.:(/)(a::$type,  b::Number) = $type(first(a)/b, last(a)/b)
     end
 end
 
 # Performing a geometric operation on a mask amounts to performing the
-# operation on the embedded shape.
+# operation on the embedded shape. Inverting a mask toggles its opacity.
 Base.:(-)(a::MaskElement) = MaskElement(-shape(a), is_opaque(a))
 Base.:(+)(a::MaskElement,  b::Point) = MaskElement(shape(a) + b, is_opaque(a))
 Base.:(-)(a::MaskElement,  b::Point) = MaskElement(shape(a) - b, is_opaque(a))
@@ -427,7 +439,8 @@ Box{T}(obj::Polygon) where {T} = convert_eltype(T, obj.box)
 # `parts(obj)` yields the individual elements of `obj` from which it can be
 # re-built without ambiguities.
 parts(obj::Point) = (obj.x, obj.y)
-parts(obj::Union{Box,Rectangle}) = (first(obj), last(obj))
+parts(obj::Box; swap::Bool=false) = swap ? (last(obj), first(obj)) : (first(obj), last(obj))
+parts(obj::Rectangle) = (first(obj), last(obj))
 parts(obj::Circle) = (center(obj), radius(obj))
 parts(obj::Polygon) = vertices(obj)
 parts(obj::MaskElement) = parts(shape(obj))
