@@ -2,8 +2,7 @@
 
 - Consider using properties instead of getters/setters.
 
-- Store polygon vertices as a vector, not a tuple. Make `vertices` return a
-  vector.
+- Make `vertices` return a vector.
 
 - Simplify building of polygons because the `convex` and `direct` fields are
   not needed by the code for forging mask.

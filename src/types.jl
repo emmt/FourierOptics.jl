@@ -293,25 +293,27 @@ struct Circle{T} <: ShapeElement{T}
     end
 end
 
-struct Polygon{T,N} <: ShapeElement{T}
-    vertices::NTuple{N,Point{T}}
+const insufficent_number_of_polygon_vertices = "polygon must have at least 3 vertices"
+
+struct Polygon{T,V<:AbstractVector{Point{T}}} <: ShapeElement{T}
+    vertices::V
     box::Box{T} # bounding-box
     direct::Bool # direct orientation?
     convex::Bool # polygon is convex?
-    function Polygon{T}(vertices::NTuple{N,Point{T}}) where {T,N}
+    function Polygon{T}(vertices::V) where {T,V<:AbstractVector{<:Point{T}}}
+        length(vertices) ≥ 3 || throw(ArgumentError(insufficent_number_of_polygon_vertices))
         isconcretetype(T) || throw(ArgumentError("coordinate type must be concrete"))
-        N ≥ 3 || throw(ArgumentError("polygon must have at least 3 vertices"))
         xmin = ymin = typemax(T)
         xmax = ymax = typemin(T)
         orient = 0
         direct = true
         convex = true
-        @inbounds for i in 1:N
+        @inbounds for i in eachindex(vertices)
             # Compute cross-product to determine whether the polygon is convex
             # and its global direction (to guess where is interior). Determine
             # bounding-box.
-            i_prev = ifelse(i > 1, i - 1, N)
-            i_next = ifelse(i < N, i + 1, 1)
+            i_prev = ifelse(i > firstindex(vertices), i - 1, lastindex(vertices))
+            i_next = ifelse(i < lastindex(vertices), i + 1, firstindex(vertices))
             s = outer(vertices[i] - vertices[i_prev],
                       vertices[i_next] - vertices[i])
             if iszero(s)
@@ -335,7 +337,7 @@ struct Polygon{T,N} <: ShapeElement{T}
             ymin = fastmin(ymin, y)
             ymax = fastmax(ymax, y)
         end
-        return new{T,N}(vertices, Box((xmin,ymin),(xmax,ymax)), direct, convex)
+        return new{T,V}(vertices, Box((xmin,ymin),(xmax,ymax)), direct, convex)
     end
 end
 

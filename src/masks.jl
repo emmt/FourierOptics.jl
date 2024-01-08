@@ -134,44 +134,83 @@ Circle(center::Point, radius) =
             "exclusively keywords `radius` or `diameter` must be specified"))
     end
 
-Polygon() = throw(ArgumentError("polygon must have at least 3 vertices"))
-Polygon(points::TwoTuple...) = Polygon(points)
-Polygon(points::Point...) = Polygon(points)
-Polygon(points::Tuple{Vararg{Point{T}}}) where {T} = Polygon{T}(points)
-Polygon(points::Tuple{Vararg{TwoTuple}}) = Polygon(map(Point, points))
-Polygon(points::Tuple{Vararg{Point}}) = Polygon{promote_eltype(points...)}(points)
-Polygon{T}() where {T} = throw(ArgumentError("polygon must have at least 3 vertices"))
-Polygon{T}(points::TwoTuple...) where {T} = Polygon{T}(points)
-Polygon{T}(points::Point...) where {T} = Polygon{T}(points)
-Polygon{T}(points::Tuple{Vararg{TwoTuple}}) where {T} = Polygon{T}(map(Point{T}, points))
-Polygon{T}(points::Tuple{Vararg{Point}}) where {T} = Polygon(map(Point{T}, points))
+Polygon() = throw(ArgumentError(insufficent_number_of_polygon_vertices))
+Polygon{T}() where {T} = throw(ArgumentError(insufficent_number_of_polygon_vertices))
+
+Polygon(pnts::TwoTuple...) = Polygon(pnts)
+Polygon(pnts::Union{Tuple{Vararg{TwoTuple}},AbstractVector{<:TwoTuple}}) =
+    Polygon(map(Point, pnts))
+
+Polygon(pnts::Point...) = Polygon(pnts)
+Polygon(pnts::Tuple{Vararg{Point}}) = Polygon{_iterate_promote_eltype(pnts)}(pnts)
+Polygon(pnts::Tuple{Vararg{Point{T}}}) where {T} = Polygon{T}(pnts)
+
+Polygon(pnts::AbstractVector{<:Point}) = Polygon{_iterate_promote_eltype(pnts)}(pnts)
+Polygon(pnts::AbstractVector{<:Point{T}}) where {T} = Polygon{T}(pnts)
+
+Polygon{T}(pnts::TwoTuple...) where {T} = Polygon{T}(pnts)
+Polygon{T}(pnts::Union{Tuple{Vararg{TwoTuple}},AbstractVector{<:TwoTuple}}) where {T} =
+    Polygon{T}(map(Point{T}, pnts))
+
+Polygon{T}(pnts::Point...) where {T} = Polygon{T}(pnts)
+Polygon{T}(pnts::Tuple{Vararg{Point}}) where {T} = Polygon{T}(collect(Point{T}, pnts))
+Polygon{T}(pnts::AbstractVector{<:Point}) where {T} = Polygon{T}(map(as(Point{T}), pnts))
+
+# FIXME:
+# abstract struct InitialType end
+# Base.promote_type(::Type{InitialType}, ::Type{T}) where {T} = T
+# Base.promote_type(::Type{T}, ::Type{InitialType}) where {T} = T
+# mapreduce(eltype, promote_type, A; init=InitialType)
+#
+function _iterate_promote_eltype(A::Union{AbstractVector{<:Point}, Tuple{Vararg{Point}}})
+    length(A) ≥ 1 || return Any
+    i = firstindex(A)
+    i_last = lastindex(A)
+    @inbounds begin
+        T = eltype(A[i])
+        while i < i_last
+            i += 1
+            T = promote_type(T, eltype(A[i]))
+        end
+        return T
+    end
+end
 
 # Type conversion and copy constructors for geometric objects.
 for type in (:GeometricObject, :Point, :Box,
              :ShapeElement, :Rectangle, :Circle, :Polygon,
              :MaskElement)
+    # Do-nothing conversions.
     @eval begin
         $type(obj::$type) = obj
         $type{T}(obj::$type{T}) where {T} = obj
-        $type{T}(obj::$type) where {T} = convert_eltype(T, obj)
+        convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
     end
-    if type ∈ (:Point, :Box, :Rectangle, :Circle, :Polygon)
-        @eval begin
-            convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
-            convert_eltype(::Type{T}, obj::$type) where {T} = $type{T}(parts(obj)...)
-        end
-    elseif type === :MaskElement
-        @eval begin
-            $type{T}(obj::ShapeElement) where {T} = $type(convert_eltype(T, obj))
-            convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
-            convert_eltype(::Type{T}, obj::$type) where {T} =
-                $type(convert_eltype(T, shape(obj)), is_opaque(obj))
-        end
+    # Conversions that amount to converting the element type (masks are special).
+    if type !== :MaskElement
+        @eval $type{T}(obj::$type) where {T} = convert_eltype(T, obj)
+    end
+    # Conversions of basic geometric objects (polygons are special).
+    if type ∈ (:Point, :Box, :Rectangle, :Circle)
+        @eval convert_eltype(::Type{T}, obj::$type) where {T} = $type{T}(parts(obj)...)
+    elseif type === :Polygon
+        @eval convert_eltype(::Type{T}, obj::$type) where {T} = $type{T}(parts(obj))
     end
 end
+
+# Element type conversions for mask (propagate the opaque flag) or mask
+# constructor with element type.
+MaskElement{T}(obj::MaskElement) where {T} =
+    MaskElement(convert_eltype(T, shape(obj)), is_opaque(obj))
+MaskElement{T}(obj::ShapeElement, opaque::Bool) where {T} =
+    MaskElement(convert_eltype(T, obj), opaque)
+convert_eltype(::Type{T}, obj::MaskElement) where {T} = MaskElement{T}(obj)
+
+# Extend convert to call constructor.
 Base.convert(::Type{T}, obj::T) where {T<:GeometricObject} = obj
 Base.convert(::Type{T}, obj) where {T<:GeometricObject} = T(obj)
 
+# Impose that collected mask elements have the same coordinate type.
 function Base.collect(obj::MaskElement, objs::MaskElement...)
     T = promote_eltype(obj, objs...)
     return MaskElement{T}[obj, objs...]
