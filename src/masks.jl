@@ -354,6 +354,7 @@ is_convex(poly::Polygon) = poly.convex
 # Geometrical objects can be used to do some math...
 Base.abs2(obj::Point) = abs2(obj.x) + abs2(obj.y)
 Base.abs(obj::Point) = sqrt(abs2(obj))
+Base.Math.atan(obj::Point) = atan(obj.y, obj.x)
 LinearAlgebra.norm(obj::Point) = abs(obj)
 inner(a::Point, b::Point) = a.x*b.x + a.y*b.y # scalar/inner product
 outer(a::Point, b::Point) = a.x*b.y - a.y*b.x # outer product
