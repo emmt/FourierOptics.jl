@@ -210,6 +210,24 @@ convert_eltype(::Type{T}, obj::MaskElement) where {T} = MaskElement{T}(obj)
 Base.convert(::Type{T}, obj::T) where {T<:GeometricObject} = obj
 Base.convert(::Type{T}, obj) where {T<:GeometricObject} = T(obj)
 
+# Conversion of geometric objects to rectangles or polygons.
+Rectangle(obj::Box) = Rectangle{eltype(obj)}(obj)
+Rectangle{T}(obj::Box) where {T} =
+    isempty(obj) ? throw(ArgumentError("cannot build a rectangle from an empty box")) :
+    Rectangle{T}(Point{T}(obj.xmin, obj.ymin), Point{T}(obj.xmin, obj.ymax))
+Polygon(obj::Union{Box,Rectangle}) = Polygon{eltype(obj)}(obj)
+Polygon{T}(obj::Box) where {T} =
+    isempty(obj) ? throw(ArgumentError("cannot build a polygon from an empty box")) :
+    Polygon{T}([Point{T}(obj.xmin, obj.ymin),
+                Point{T}(obj.xmax, obj.ymin),
+                Point{T}(obj.xmax, obj.ymax),
+                Point{T}(obj.xmin, obj.ymax)])
+Polygon{T}(obj::Rectangle) where {T} =
+    Polygon{T}([Point{T}(obj.x0, obj.y0),
+                Point{T}(obj.x1, obj.y0),
+                Point{T}(obj.x1, obj.y1),
+                Point{T}(obj.x0, obj.y1)])
+
 # Impose that collected mask elements have the same coordinate type.
 function Base.collect(obj::MaskElement, objs::MaskElement...)
     T = promote_eltype(obj, objs...)

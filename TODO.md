@@ -7,11 +7,6 @@
 - Simplify building of polygons because the `convex` and `direct` fields are
   not needed by the code for forging mask.
 
-- Constructors to build a rectangle from a box and conversely. `Box(rect)` is
-  already implemented.
-
-- Constructors to build a polygon from a box or a rectangle.
-
 - Additional type for complex mask consisting in the combination of elementary
   apertures and obscurations.
 
@@ -36,12 +31,6 @@
 
 - Check optimality of the forging mask algorithm regarding the use of bounding
   boxes.
-
-- Constructors for `*Aperture{T}` and `*Obscuration{T}`.
-
-- More generic constructors: `Aperture(shape) = TransparentMask(shape)` and
-  `Obscuration(shape) = OpaqueMask(shape)` to replace, for example,
-  `CircularAperture(args...)` by `Aperture(Circle(args...))`.
 
 - Add constructor for regular polygons. For example, with keyword-based
   constructor: `Polygon(; orient=, radius=, center=, edges=)`.
