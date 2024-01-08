@@ -6,8 +6,8 @@ const default_antialiasing = 11
 multiplies the complex amplitude of the input field `Fin` by a mask defined by
 arguments `args...` and keywords `kwds...` and returns the resulting output
 field `Fout`. The input field `Fin` is left unmodified, method
-[`FourierOptics.insert_mask!`](@ref) may be used for in-place operation.
-See [`FourierOptics.forge_mask`](@ref) for how to define a mask.
+[`FourierOptics.insert_mask!`](@ref) may be used for in-place operation. See
+[`FourierOptics.forge_mask`](@ref) for how to define a mask.
 
 """
 insert_mask(F::Field, args...; kwds...) = insert_mask!(copy(F), args...; kwds...)
@@ -26,8 +26,8 @@ insert_mask!(F::Field, args...; kwds...) = multiply!(F, forge_mask(F, args...; k
 # Alias for a 2-tuple representing a pair of coordinates.
 const TwoTuple{A,B} = Tuple{A,B}
 
-Base.eltype(x::GeometricalObject) = Base.eltype(typeof(x))
-Base.eltype(::Type{<:GeometricalObject{T}}) where {T} = T
+Base.eltype(x::GeometricObject) = Base.eltype(typeof(x))
+Base.eltype(::Type{<:GeometricObject{T}}) where {T} = T
 
 """
     FourierOptics.Point{T}(x, y)
@@ -73,7 +73,7 @@ Corner coordinates may be specified as points or as 2-tuples: `(llx,lly) =
 
 If `llx > urx` or `lly > ury`, the box is considered as **empty**.
 
-Boxes are used to represent grid cells and bounding-boxes of other geometrical
+Boxes are used to represent grid cells and bounding-boxes of other geometric
 shape. Use [`FourierOptics.Rectangle`](@ref) if you want to define rectangular
 masks.
 
@@ -146,9 +146,9 @@ Polygon{T}(points::Point...) where {T} = Polygon{T}(points)
 Polygon{T}(points::Tuple{Vararg{TwoTuple}}) where {T} = Polygon{T}(map(Point{T}, points))
 Polygon{T}(points::Tuple{Vararg{Point}}) where {T} = Polygon(map(Point{T}, points))
 
-# Type conversion and copy constructors for geometrical objects.
-for type in (:GeometricalObject, :Point, :Box,
-             :ShapeObject, :Rectangle, :Circle, :Polygon,
+# Type conversion and copy constructors for geometric objects.
+for type in (:GeometricObject, :Point, :Box,
+             :ShapeElement, :Rectangle, :Circle, :Polygon,
              :MaskElement)
     @eval begin
         $type(obj::$type) = obj
@@ -162,15 +162,15 @@ for type in (:GeometricalObject, :Point, :Box,
         end
     elseif type === :MaskElement
         @eval begin
-            $type{T}(obj::ShapeObject) where {T} = $type(convert_eltype(T, obj))
+            $type{T}(obj::ShapeElement) where {T} = $type(convert_eltype(T, obj))
             convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
             convert_eltype(::Type{T}, obj::$type) where {T} =
                 $type(convert_eltype(T, shape(obj)), is_opaque(obj))
         end
     end
 end
-Base.convert(::Type{T}, obj::T) where {T<:GeometricalObject} = obj
-Base.convert(::Type{T}, obj) where {T<:GeometricalObject} = T(obj)
+Base.convert(::Type{T}, obj::T) where {T<:GeometricObject} = obj
+Base.convert(::Type{T}, obj) where {T<:GeometricObject} = T(obj)
 
 function Base.collect(obj::MaskElement, objs::MaskElement...)
     T = promote_eltype(obj, objs...)
@@ -179,8 +179,8 @@ end
 
 Base.Tuple(obj::Union{Point,Box,Rectangle,Circle}) = parts(obj)
 
-# Iterating over a basic geometrical object is like iteration over the
-# arguments of the most basic constructor.
+# Iterating over a basic geometric object is like iteration over the arguments
+# of the most basic constructor.
 @inline Base.iterate(obj::Point, i::Int=1) =
     i == 1 ? (obj.x, 2) :
     i == 2 ? (obj.y, 3) : nothing
@@ -337,7 +337,7 @@ function vertices(obj::Union{Box,Rectangle})
 end
 
 shape(obj::MaskElement) = obj.shape
-shape(obj::ShapeObject) = obj
+shape(obj::ShapeElement) = obj
 
 is_opaque(obj::MaskElement) = obj.opaque
 is_transparent(obj::MaskElement) = !is_opaque(obj)
@@ -347,7 +347,7 @@ is_convex(rect::Rectangle) = true
 is_convex(circle::Circle) = true
 is_convex(poly::Polygon) = poly.convex
 
-# Geometrical objects can be used to do some math...
+# Geometric objects can be used to do some math...
 Base.abs2(obj::Point) = abs2(obj.x) + abs2(obj.y)
 Base.abs(obj::Point) = sqrt(abs2(obj))
 Base.Math.atan(obj::Point) = atan(obj.y, obj.x)
@@ -356,15 +356,16 @@ inner(a::Point, b::Point) = a.x*b.x + a.y*b.y # scalar/inner product
 outer(a::Point, b::Point) = a.x*b.y - a.y*b.x # outer product
 Base.:(*)(a::Point, b::Point) = inner(a, b) # scalar product
 
-# Just permute operands for some common operations.
-Base.:(+)(a::Point, b::GeometricalObject) = b + a
-Base.:(*)(a::GeometricalObject, b::Number) = b*a
-Base.:(\)(a::Number, b::GeometricalObject) = b/a
+# Just permute operands for some common operations on geometric objects.
+Base.:(+)(a::Point, b::GeometricObject) = b + a
+Base.:(*)(a::GeometricObject, b::Number) = b*a
+Base.:(\)(a::Number, b::GeometricObject) = b/a
 
-# Adding a point to a shape amounts to shifting the shape. Unary plus does
-# nothing. Unary minus behaves as multiplying by -1. Multiplying/dividing a
-# geometrical object by a number amounts to scaling around origin.
-Base.:(+)(a::GeometricalObject) = a
+# Common mathematical operations on geometric objects. Adding a point to a
+# geometric object amounts to shifting the object. Unary plus does nothing.
+# Unary minus behaves as multiplying by -1. Multiplying/dividing a geometric
+# object by a number amounts to scaling around origin.
+Base.:(+)(a::GeometricObject) = a
 
 Base.:(-)(a::Point) = Point(-a.x, -a.y)
 Base.:(+)(a::Point,  b::Point) = Point(a.x + b.x, a.y + b.y)
@@ -397,7 +398,7 @@ for type in (:Box, :Rectangle)
     end
 end
 
-# Performing a geometrical operation on a mask amounts to performing the
+# Performing a geometric operation on a mask amounts to performing the
 # operation on the embedded shape.
 Base.:(-)(a::MaskElement) = MaskElement(-shape(a), is_opaque(a))
 Base.:(+)(a::MaskElement,  b::Point) = MaskElement(shape(a) + b, is_opaque(a))
@@ -410,10 +411,10 @@ Base.inv(a::MaskElement) = MaskElement(shape(a), !is_opaque(a))
 """
     FourierOptics.Box{T=eltype(obj)}(obj)
 
-yields the bounding-box of the geometrical object `obj`.
+yields the bounding-box of the geometric object `obj`.
 
 """
-Box(obj::ShapeObject) = Box{eltype(obj)}(obj)
+Box(obj::ShapeElement) = Box{eltype(obj)}(obj)
 Box{T}(obj::MaskElement) where {T} = Box{T}(shape(obj))
 Box{T}(obj::Rectangle) where {T} = Box{T}(first(obj), last(obj))
 function Box{T}(obj::Circle) where {T}
@@ -699,7 +700,7 @@ end
 function unsafe_forge_mask!(dst::AbstractMatrix{V},
                             X::AbstractVector{T}, δx::T,
                             Y::AbstractVector{T}, δy::T,
-                            obj::ShapeObject{T},
+                            obj::ShapeElement{T},
                             value::V,
                             partial::V) where {T,V}
     box = grow(Box(obj), δx, δy)

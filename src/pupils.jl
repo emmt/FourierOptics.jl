@@ -1,9 +1,9 @@
 """
     FourierOptics.pupil([T=$Float,] id; kwds...) -> mask
 
-yields a composite geometrical object describing the entrance pupil of the
-instrument identified by `id`. Optional argument `T` is the floating-point type
-of the result.
+yields a composite object describing the entrance pupil of the instrument
+identified by `id`. Optional argument `T` is the floating-point type of the
+result.
 
 Instrument identifier `id` may be a symbolic name or a `Val` singleton
 parameterized by this symbolic name.

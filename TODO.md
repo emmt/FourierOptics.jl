@@ -16,16 +16,20 @@
 - Additional type for complex mask consisting in the combination of elementary
   apertures and obscurations.
 
-- Affine geometrical transforms to geometrical objects.
+- Affine geometric transforms to geometric objects.
 
-- Broadcast `.*` as `*` for multiplication of geometrical objects by a scalar.
+- Broadcast `.*` as `*` for multiplication of geometric objects by a scalar.
 
 - Export `grow` and `shrink`?
 
-- Revise the logic of adding or subtracting a point to a geometrical object. If
-  the geometrical object is seen as a set of points (possibly empty for a box),
-  then adding or subtracting a point to a geometrical object should yield the
-  set corresponding to the point-wise operation between the input point and all
+- Implement `rotate(obj; by::Angle, around::Point)`.
+
+- Implement `origin(::Type{<:GeometricObject{T}}) where {T} = Point(zero(T), zero(T))`.
+
+- Revise the logic of adding or subtracting a point to a geometric object. If
+  the geometric object is seen as a set of points (possibly empty for a box),
+  then adding or subtracting a point to a geometric object should yield the set
+  corresponding to the point-wise operation between the input point and all
   points of the input set. This may be restricted to `.+` and `.-` operators.
 
 - Change the 50% antialiasing rule to apply for `antialiasing ≤ 0`, not for

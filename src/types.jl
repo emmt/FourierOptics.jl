@@ -163,7 +163,7 @@ yields a lightweight vector-like object whose elements give the coordinates
 along an array axis with indices `inds`. If argument `inds` is an integer, it
 is assumed to be the length of an array axis with 1-based indices. Optional
 argument `cen` is the *central* index whose coordinate is zero. If `cen` is
-unspecified, it is assumed to be at the geometrical center of the axis
+unspecified, it is assumed to be at the geometric center of the axis
 (following the same conventions as in `fftshift` and `ifftshift`).
 
 """
@@ -212,40 +212,48 @@ end
 end
 
 """
-    FourierOptics.GeometricalObject{T}
+    FourierOptics.GeometricObject{T}
 
-is the super-type of geometrical objects whose coordinates are of type `T` and
-used to specify bounding-boxes, positions, and boundaries of optical masks.
+is the super-type of geometric objects whose coordinates are of type `T`.
 
 FIXME: `T` must be floating point.
 
 """
-abstract type GeometricalObject{T} end
+abstract type GeometricObject{T} end
 
 """
-    FourierOptics.ShapeObject{T}
+    FourierOptics.GeometricElement{T} <: FourierOptics.GeometricObject{T}
 
-is the super-type of shape objects whose coordinates are of type `T` and which
-can be used to specify boundaries.
-
-"""
-abstract type ShapeObject{T} <: GeometricalObject{T} end
+is the super-type of elementary geometric objects whose coordinates are of type
+`T`.
 
 """
-    FourierOptics.MaskElement(shape::ShapeObject, opaque::Bool)
+abstract type GeometricElement{T} <: GeometricObject{T} end
+
+"""
+    FourierOptics.ShapeElement{T} <: FourierOptics.GeometricElement{T}
+
+is the super-type of elementary geometric objects whose coordinates are of type
+`T` and which can be used to specify boundaries.
+
+"""
+abstract type ShapeElement{T} <: GeometricElement{T} end
+
+"""
+    FourierOptics.MaskElement(shape::ShapeElement, opaque::Bool)
 
 builds a simple mask whose boundaries are defined by `shape` and which is
 opaque (i.e., an obscuration) if `opaque` is true and transparent (i.e., an
 aperture) otherwise.
 
 """
-struct MaskElement{T,S} <: ShapeObject{T}
+struct MaskElement{T,S} <: ShapeElement{T}
     shape::S
     opaque::Bool
-    MaskElement(obj::S, opaque::Bool) where {T,S<:ShapeObject{T}} = new{T,S}(obj, opaque)
+    MaskElement(obj::S, opaque::Bool) where {T,S<:ShapeElement{T}} = new{T,S}(obj, opaque)
 end
 
-struct Point{T} <: GeometricalObject{T}
+struct Point{T} <: GeometricElement{T}
     x::T
     y::T
     Point{T}(x, y) where {T} = new{T}(x, y)
@@ -253,7 +261,7 @@ end
 
 const Points{T} = Union{AbstractVector{Point{T}},Tuple{Vararg{Point{T}}}}
 
-struct Box{T} <: GeometricalObject{T}
+struct Box{T} <: GeometricElement{T}
     xmin::T
     ymin::T
     xmax::T
@@ -261,7 +269,7 @@ struct Box{T} <: GeometricalObject{T}
     Box{T}(ll::Point,ur::Point) where {T} = new{T}(ll.x, ll.y, ur.x, ur.y)
 end
 
-struct Rectangle{T} <: ShapeObject{T}
+struct Rectangle{T} <: ShapeElement{T}
     x0::T
     y0::T
     x1::T
@@ -275,7 +283,7 @@ struct Rectangle{T} <: ShapeObject{T}
     end
 end
 
-struct Circle{T} <: ShapeObject{T}
+struct Circle{T} <: ShapeElement{T}
     x::T
     y::T
     r::T
@@ -285,7 +293,7 @@ struct Circle{T} <: ShapeObject{T}
     end
 end
 
-struct Polygon{T,N} <: ShapeObject{T}
+struct Polygon{T,N} <: ShapeElement{T}
     vertices::NTuple{N,Point{T}}
     box::Box{T} # bounding-box
     direct::Bool # direct orientation?
