@@ -287,8 +287,10 @@ struct Circle{T} <: ShapeObject{T}
     x::T
     y::T
     r::T
-    Circle{T}(center::Point, radius) where {T} =
-        new{T}(center.x, center.y, fastmax(zero(radius), radius))
+    function Circle{T}(center::Point, radius) where {T}
+        radius ≥ zero(radius) || throw(ArgumentError("circle radius must be non-negative"))
+        new{T}(center.x, center.y, radius)
+    end
 end
 
 struct Polygon{T,N} <: ShapeObject{T}
