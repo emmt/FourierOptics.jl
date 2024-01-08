@@ -2,9 +2,6 @@
 
 - Consider using properties instead of getters/setters.
 
-- Replace transparent/opaque mask types by a single parametric type with a
-  flag.
-
 - Store polygon vertices as a vector, not a tuple. Make `vertices` return a
   vector.
 

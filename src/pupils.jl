@@ -126,10 +126,10 @@ function pupil(::Type{T}, ::Val{:VLT};
 
     return (
         # FIXME: specify type parameter
-        CircularAperture(; center, diameter = outer_diameter), # aperture
-        CircularObscuration(; center, diameter = inner_diameter), # central obscuration
-        PolygonalObscuration(V1),
-        PolygonalObscuration(V2),
-        PolygonalObscuration(V3),
-        PolygonalObscuration(V4))
+        circular_aperture(; center, diameter = outer_diameter), # aperture
+        circular_obscuration(; center, diameter = inner_diameter), # central obscuration
+        polygonal_obscuration(V1),
+        polygonal_obscuration(V2),
+        polygonal_obscuration(V3),
+        polygonal_obscuration(V4))
 end

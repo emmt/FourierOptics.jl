@@ -149,7 +149,7 @@ Polygon{T}(points::Tuple{Vararg{Point}}) where {T} = Polygon(map(Point{T}, point
 # Type conversion and copy constructors for geometrical objects.
 for type in (:GeometricalObject, :Point, :Box,
              :ShapeObject, :Rectangle, :Circle, :Polygon,
-             :MaskObject, :OpaqueMask, :TransparentMask)
+             :MaskElement)
     @eval begin
         $type(obj::$type) = obj
         $type{T}(obj::$type{T}) where {T} = obj
@@ -160,21 +160,21 @@ for type in (:GeometricalObject, :Point, :Box,
             convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
             convert_eltype(::Type{T}, obj::$type) where {T} = $type{T}(parts(obj)...)
         end
-    elseif type ∈ (:OpaqueMask, :TransparentMask)
+    elseif type === :MaskElement
         @eval begin
             $type{T}(obj::ShapeObject) where {T} = $type(convert_eltype(T, obj))
             convert_eltype(::Type{T}, obj::$type{T}) where {T} = obj
             convert_eltype(::Type{T}, obj::$type) where {T} =
-                $type(convert_eltype(T, shape(obj)))
+                $type(convert_eltype(T, shape(obj)), is_opaque(obj))
         end
     end
 end
 Base.convert(::Type{T}, obj::T) where {T<:GeometricalObject} = obj
 Base.convert(::Type{T}, obj) where {T<:GeometricalObject} = T(obj)
 
-function Base.collect(obj::MaskObject, objs::MaskObject...)
+function Base.collect(obj::MaskElement, objs::MaskElement...)
     T = promote_eltype(obj, objs...)
-    return MaskObject{T}[obj, objs...]
+    return MaskElement{T}[obj, objs...]
 end
 
 Base.Tuple(obj::Union{Point,Box,Rectangle,Circle}) = parts(obj)
@@ -269,9 +269,7 @@ function Base.isapprox(a::Polygon, b::Polygon; kwds...)
 end
 
 for type in (:Point, :Box, :Rectangle, :Circle, :Polygon,
-             :RectangularAperture, :RectangularObscuration,
-             :CircularAperture, :CircularObscuration,
-             :PolygonalAperture, :PolygonalObscuration)
+             :MaskElement)
     @eval begin
         showntype(::Union{$type,Type{<:$type}}) = $(string(type))
     end
@@ -338,15 +336,13 @@ function vertices(obj::Union{Box,Rectangle})
     return Point(x0,y0), Point(x1,y0), Point(x1,y1), Point(x0,y1)
 end
 
-shape(obj::MaskObject) = obj.shape
+shape(obj::MaskElement) = obj.shape
 shape(obj::ShapeObject) = obj
 
-is_opaque(obj::OpaqueMask) = true
-is_opaque(obj::MaskObject) = false
+is_opaque(obj::MaskElement) = obj.opaque
+is_transparent(obj::MaskElement) = !is_opaque(obj)
 
-is_transparent(obj::MaskObject) = !is_opaque(obj)
-
-is_convex(mask::MaskObject) = is_convex(shape(mask))
+is_convex(mask::MaskElement) = is_convex(shape(mask))
 is_convex(rect::Rectangle) = true
 is_convex(circle::Circle) = true
 is_convex(poly::Polygon) = poly.convex
@@ -403,16 +399,13 @@ end
 
 # Performing a geometrical operation on a mask amounts to performing the
 # operation on the embedded shape.
-for type in (:OpaqueMask, :TransparentMask)
-    @eval begin
-        Base.:(-)(a::$type) = $type(-shape(a))
-        Base.:(+)(a::$type,  b::Point) = $type(shape(a) + b)
-        Base.:(-)(a::$type,  b::Point) = $type(shape(a) - b)
-        Base.:(-)(a::Point,  b::$type) = $type(a - shape(b))
-        Base.:(*)(a::Number, b::$type) = $type(a*shape(b))
-        Base.:(/)(a::$type,  b::Number) = $type(shape(a)/b)
-    end
-end
+Base.:(-)(a::MaskElement) = MaskElement(-shape(a), is_opaque(a))
+Base.:(+)(a::MaskElement,  b::Point) = MaskElement(shape(a) + b, is_opaque(a))
+Base.:(-)(a::MaskElement,  b::Point) = MaskElement(shape(a) - b, is_opaque(a))
+Base.:(-)(a::Point,  b::MaskElement) = MaskElement(a - shape(b), is_opaque(b))
+Base.:(*)(a::Number, b::MaskElement) = MaskElement(a*shape(b), is_opaque(b))
+Base.:(/)(a::MaskElement,  b::Number) = MaskElement(shape(a)/b, is_opaque(a))
+Base.inv(a::MaskElement) = MaskElement(shape(a), !is_opaque(a))
 
 """
     FourierOptics.Box{T=eltype(obj)}(obj)
@@ -421,7 +414,7 @@ yields the bounding-box of the geometrical object `obj`.
 
 """
 Box(obj::ShapeObject) = Box{eltype(obj)}(obj)
-Box{T}(obj::MaskObject) where {T} = Box{T}(shape(obj))
+Box{T}(obj::MaskElement) where {T} = Box{T}(shape(obj))
 Box{T}(obj::Rectangle) where {T} = Box{T}(first(obj), last(obj))
 function Box{T}(obj::Circle) where {T}
     c = center(obj)
@@ -436,7 +429,7 @@ parts(obj::Point) = (obj.x, obj.y)
 parts(obj::Union{Box,Rectangle}) = (first(obj), last(obj))
 parts(obj::Circle) = (center(obj), radius(obj))
 parts(obj::Polygon) = vertices(obj)
-parts(obj::MaskObject) = parts(shape(obj))
+parts(obj::MaskElement) = parts(shape(obj))
 
 # Fast versions of `min` and `max` which return their first argument if any
 # argument is a NaN. The fast version of `minmax` cannot warrants this
@@ -449,72 +442,72 @@ for func in (:fastmax, :fasmin, :fastminmax)
 end
 
 """
-    FourierOptics.RectangularAperture(args...; kwds...)
+    FourierOptics.rectangular_aperture(args...; kwds...)
 
-yields a mask object representing a rectangular aperture defined by given
-arguments `args...` and keywords `kwds...` and whose edges are aligned with the
-Cartesian axes. See [`FourierOptics.Rectangle`](@ref) constructor for possible
-arguments and keywords. A rectangular aperture is a transparent rectangular
-mask.
-
-"""
-RectangularAperture(args...; kwds...) = TransparentMask(Rectangle(args...; kwds...))
+yields an elementary mask object representing a rectangular aperture defined by
+given arguments `args...` and keywords `kwds...` and whose edges are aligned
+with the Cartesian axes. See [`FourierOptics.Rectangle`](@ref) constructor for
+possible arguments and keywords. A rectangular aperture is a transparent
+rectangular mask.
 
 """
-    FourierOptics.RectangularObscuration(args...; kwds...)
-
-yields a mask object representing a rectangular obscuration defined by given
-arguments `args...` and keywords `kwds...` and whose edges are aligned with the
-Cartesian axes. See [`FourierOptics.Rectangle`](@ref) constructor for possible
-arguments and keywords. A rectangular obscuration is an opaque rectangular
-mask.
+rectangular_aperture(args...; kwds...) = MaskElement(Rectangle(args...; kwds...), false)
 
 """
-RectangularObscuration(args...; kwds...) = OpaqueMask(Rectangle(args...; kwds...))
+    FourierOptics.rectangular_obscuration(args...; kwds...)
+
+yields an elementary mask object representing a rectangular obscuration defined
+by given arguments `args...` and keywords `kwds...` and whose edges are aligned
+with the Cartesian axes. See [`FourierOptics.Rectangle`](@ref) constructor for
+possible arguments and keywords. A rectangular obscuration is an opaque
+rectangular mask.
 
 """
-    FourierOptics.CircularAperture(args...; kwds...)
-
-yields a mask object representing a circular aperture defined by given
-arguments `args...` and keywords `kwds...`. See [`FourierOptics.Circle`](@ref)
-constructor for possible arguments and keywords. A circular aperture is a
-transparent circular mask.
+rectangular_obscuration(args...; kwds...) = MaskElement(Rectangle(args...; kwds...), true)
 
 """
-CircularAperture(args...; kwds...) = TransparentMask(Circle(args...; kwds...))
+    FourierOptics.circular_aperture(args...; kwds...)
+
+yields an elementary mask object representing a circular aperture defined by
+given arguments `args...` and keywords `kwds...`. See
+[`FourierOptics.Circle`](@ref) constructor for possible arguments and keywords.
+A circular aperture is a transparent circular mask.
 
 """
-    FourierOptics.CircularObscuration(args...; kwds...)
-
-yields a mask object representing a circular obscuration defined by given
-arguments `args...` and keywords `kwds...`. See [`FourierOptics.Circle`](@ref)
-constructor for possible arguments and keywords. A circular obscuration is an
-opaque circular mask.
+circular_aperture(args...; kwds...) = MaskElement(Circle(args...; kwds...), false)
 
 """
-CircularObscuration(args...; kwds...) = OpaqueMask(Circle(args...; kwds...))
+    FourierOptics.circular_obscuration(args...; kwds...)
+
+yields an elementary mask object representing a circular obscuration defined by
+given arguments `args...` and keywords `kwds...`. See
+[`FourierOptics.Circle`](@ref) constructor for possible arguments and keywords.
+A circular obscuration is an opaque circular mask.
 
 """
-    FourierOptics.PolygonalAperture(args...; kwds...)
-
-yields a mask object representing a polygonal aperture defined by given
-arguments `args...` and keywords `kwds...`. See [`FourierOptics.Polygon`](@ref)
-constructor for possible arguments and keywords. A polygonal aperture is a
-transparent polygonal mask.
+circular_obscuration(args...; kwds...) = MaskElement(Circle(args...; kwds...), true)
 
 """
-PolygonalAperture(args...; kwds...) = TransparentMask(Polygon(args...; kwds...))
+    FourierOptics.polygonal_aperture(args...; kwds...)
+
+yields an elementary mask object representing a polygonal aperture defined by
+given arguments `args...` and keywords `kwds...`. See
+[`FourierOptics.Polygon`](@ref) constructor for possible arguments and
+keywords. A polygonal aperture is a transparent polygonal mask.
 
 """
-    FourierOptics.PolygonalObscuration(args...; kwds...)
-
-yields a mask object representing a polygonal obscurationdefined by given
-arguments `args...` and keywords `kwds...`. See [`FourierOptics.Polygon`](@ref)
-constructor for possible arguments and keywords. A polygonal obscuration is an
-opaque polygonal mask.
+polygonal_aperture(args...; kwds...) = MaskElement(Polygon(args...; kwds...), false)
 
 """
-PolygonalObscuration(args...; kwds...) = OpaqueMask(Polygon(args...; kwds...))
+    FourierOptics.polygonal_obscuration(args...; kwds...)
+
+yields an elementary mask object representing a polygonal obscurationdefined by
+given arguments `args...` and keywords `kwds...`. See
+[`FourierOptics.Polygon`](@ref) constructor for possible arguments and
+keywords. A polygonal obscuration is an opaque polygonal mask.
+
+"""
+polygonal_obscuration(args...; kwds...) = MaskElement(Polygon(args...; kwds...), true)
 
 # Yields a range with `n` points centered around zero and step `s/n`. This
 # method is used to index a sub-cell.
@@ -590,10 +583,10 @@ Example:
     hoff = Point(height, width)
     mask = forge_mask(
         X, Y,
-        CircularAperture(center, outer_radius), # aperture
-        CircularObscuration(center, inner_radius), # central obscuration
-        RectangularObscuration(center - voff/2, center + voff/2),
-        RectangularObscuration(center - hoff/2, center + hoff/2),
+        circular_aperture(center, outer_radius), # aperture
+        circular_obscuration(center, inner_radius), # central obscuration
+        rectangular_obscuration(center - voff/2, center + voff/2),
+        rectangular_obscuration(center - hoff/2, center + hoff/2),
         ...)
 
 """
@@ -607,7 +600,7 @@ end
 function forge_mask!(dst::AbstractMatrix,
                      X::AbstractVector,
                      Y::AbstractVector,
-                     args::Tuple{Vararg{MaskObject}};
+                     args::Tuple{Vararg{MaskElement}};
                      kwds...)
     return forge_mask!(dst, X, Y, args...; kwds...)
 end
@@ -615,7 +608,7 @@ end
 function forge_mask!(dst::AbstractMatrix,
                      X::AbstractVector,
                      Y::AbstractVector,
-                     args::MaskObject...;
+                     args::MaskElement...;
                      antialiasing::Integer = 11,
                      opaque = zero(eltype(dst)),
                      transparent = oneunit(eltype(dst)))
@@ -640,7 +633,7 @@ end
 function unsafe_forge_mask!(dst::AbstractMatrix{T},
                             X::AbstractVector{C},
                             Y::AbstractVector{C},
-                            objs::MaskObject{C}...;
+                            objs::MaskElement{C}...;
                             antialiasing::Int,
                             opaque::T,
                             transparent::T) where {T,C}
@@ -690,7 +683,7 @@ end
 function unsafe_forge_mask!(dst::AbstractMatrix{V},
                             X::AbstractVector{T}, δx::T,
                             Y::AbstractVector{T}, δy::T,
-                            mask::MaskObject{T},
+                            mask::MaskElement{T},
                             opaque::V,
                             partial::V,
                             transparent::V,
@@ -738,7 +731,7 @@ end
 function unsafe_forge_mask!(state::AbstractMatrix{Bool},
                             x0::T, dx::AbstractVector{T},
                             y0::T, dy::AbstractVector{T},
-                            obj::MaskObject{T},
+                            obj::MaskElement{T},
                             count::Int) where {T}
     # FIXME: Skip all this if pixel is outside boundaries.
     I, J = axes(state)
@@ -755,27 +748,33 @@ function unsafe_forge_mask!(state::AbstractMatrix{Bool},
                 count += transp
             end
         end
-    else
+    elseif is_opaque(obj)
         @inbounds for j in J
             y = y0 + dy[j]
             for i in I
                 x = x0 + dx[i]
                 if Overlap(Point(x,y), obj) != OUTSIDE
-                    # Point is considered as being inside boundaries of mask.
-                    if is_opaque(obj) # NOTE: This branch optimized out by compiler.
-                        # Sub-cell must be opaque.
-                        if state[i,j]
-                            # Sub-cell previously counted as transparent.
-                            state[i,j] = false
-                            count -= 1
-                        end
-                    else
-                        # Sub-cell must be transparent.
-                        if !state[i,j]
-                            # Sub-cell previously considered as opaque.
-                            state[i,j] = true
-                            count += 1
-                        end
+                    # Point is considered as being inside boundaries of opaque
+                    # mask.
+                    if state[i,j]
+                        # Sub-cell previously counted as transparent.
+                        state[i,j] = false
+                        count -= 1
+                    end
+                end
+            end
+        end
+    else # element is transparent
+        @inbounds for j in J
+            y = y0 + dy[j]
+            for i in I
+                x = x0 + dx[i]
+                if Overlap(Point(x,y), obj) != OUTSIDE
+                    # Point is considered as being inside boundaries of transparent mask.
+                    if !state[i,j]
+                        # Sub-cell previously considered as opaque.
+                        state[i,j] = true
+                        count += 1
                     end
                 end
             end
@@ -829,7 +828,7 @@ point or a box. Returned value is:
 - `PARTIAL` if `pxl` straddles some boundaries of `obj`.
 
 """
-Overlap(pxl, obj::MaskObject) = Overlap(pxl, shape(obj))
+Overlap(pxl, obj::MaskElement) = Overlap(pxl, shape(obj))
 
 function Overlap(cell::Box{T}, rect::Rectangle{T}) where {T}
     (x0, y0), (x1, y1) = cell

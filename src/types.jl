@@ -232,25 +232,17 @@ can be used to specify boundaries.
 abstract type ShapeObject{T} <: GeometricalObject{T} end
 
 """
-    FourierOptics.MaskObject{T}
+    FourierOptics.MaskElement(shape::ShapeObject, opaque::Bool)
 
-is the super-type of transparent (i.e., apertures) or opaque (i.e.,
-obscurations) geometrical objects whose coordinates are of type `T` and used to
-forge optical masks.
+builds a simple mask whose boundaries are defined by `shape` and which is
+opaque (i.e., an obscuration) if `opaque` is true and transparent (i.e., an
+aperture) otherwise.
 
 """
-abstract type MaskObject{T,S<:ShapeObject{T}} <: ShapeObject{T} end
-
-# An opaque mask represents an obscuration.
-struct OpaqueMask{T,S} <: MaskObject{T,S}
+struct MaskElement{T,S} <: ShapeObject{T}
     shape::S
-    OpaqueMask(obj::S) where {T,S<:ShapeObject{T}} = new{T,S}(obj)
-end
-
-# A transparent mask represents an aperture.
-struct TransparentMask{T,S} <: MaskObject{T,S}
-    shape::S
-    TransparentMask(obj::S) where {T,S<:ShapeObject{T}} = new{T,S}(obj)
+    opaque::Bool
+    MaskElement(obj::S, opaque::Bool) where {T,S<:ShapeObject{T}} = new{T,S}(obj, opaque)
 end
 
 struct Point{T} <: GeometricalObject{T}
@@ -343,9 +335,7 @@ for (parent, child) in ((:Rectangle, :Rectangular),
                         (:Circle,    :Circular),
                         (:Polygon,   :Polygonal),)
     @eval begin
-        const $(Symbol(child,"Mask")){T} = MaskObject{T,<:$parent{T}}
-        const $(Symbol(child,"Aperture")){T} = TransparentMask{T,<:$parent{T}}
-        const $(Symbol(child,"Obscuration")){T} = OpaqueMask{T,<:$parent{T}}
+        const $(Symbol(child,"Mask")){T} = MaskElement{T,<:$parent{T}}
     end
 end
 
