@@ -35,8 +35,7 @@ import AbstractFFTs: Plan, fftshift, ifftshift
 using ArrayTools, TypeUtils, Unitless
 using LinearAlgebra
 
-import Unitless: floating_point_type
-import TypeUtils: as_eltype, convert_eltype
+import TypeUtils: as_eltype, convert_eltype, floating_point_type
 
 using Base: axes1, Fix1, Fix2
 

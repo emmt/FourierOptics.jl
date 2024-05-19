@@ -1,4 +1,4 @@
-using FourierOptics, Test, LinearAlgebra, TypeUtils, Unitful, Unitless
+using FourierOptics, Test, LinearAlgebra, TypeUtils, Unitful
 using FourierOptics:
     GeometricObject, Point, Box, Rectangle, Circle, Polygon,
     center, diameter, radius, vertices
