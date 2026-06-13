@@ -12,6 +12,7 @@ TypeUtils = "c3b1956e-8857-4d84-9b79-890df85b1e67"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
+ArrayTools = "0.3"
 FFTW = "1"
 TypeUtils = "1"
 Unitful = "1"
